@@ -120,6 +120,27 @@ SHOT_SCHEMA = {
     },
 }
 
+QA_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "status": {
+            "type": "STRING",
+            "enum": ["approved", "rejected"],
+            "description": "Whether the video passes QA",
+        },
+        "reason": {
+            "type": "STRING",
+            "description": "Explanation for the decision",
+        },
+        "issues": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of specific issues found (e.g., limb melting, inconsistency)",
+        },
+    },
+    "required": ["status", "reason"],
+}
+
 CHAPTER_BOUNDARY_SCHEMA = {
     "type": "ARRAY",
     "items": {

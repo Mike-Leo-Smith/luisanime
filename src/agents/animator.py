@@ -1,18 +1,7 @@
 from pathlib import Path
-from typing import Any
 from src.core.state import PipelineState
 from src.agents.utils import get_video_provider
 from src.providers.base import VideoGenerationConfig
-
-
-def generate_video_clip(prompt: str, keyframe_path: str, config: Any) -> bytes:
-    print(f"--- VIDEO GEN: {prompt[:60]}... ---")
-
-    provider = get_video_provider(config, "animator")
-    gen_config = VideoGenerationConfig(duration=6, resolution="1080p")
-    response = provider.generate_video(prompt, keyframe_path, gen_config)
-
-    return response.video_bytes
 
 
 def animator(state: PipelineState) -> PipelineState:
@@ -27,16 +16,22 @@ def animator(state: PipelineState) -> PipelineState:
         if not shot.keyframe_url:
             raise ValueError(f"Shot {shot.id} is missing a keyframe.")
 
-        video_bytes = generate_video_clip(shot.prompt, shot.keyframe_url, state)
+        provider = get_video_provider(state, "animator")
+        gen_config = VideoGenerationConfig(duration=6, resolution="1080p")
 
-        if not video_bytes:
+        print(f"  Generating video for: {shot.prompt[:60]}...")
+        response = provider.generate_video(shot.prompt, shot.keyframe_url, gen_config)
+
+        if not response.video_bytes:
             raise ValueError("Video generation returned empty bytes")
 
-        video_path = f"{project_dir}/scenes/{shot.id}_video.mp4"
-        with open(video_path, "wb") as f:
-            f.write(video_bytes)
+        shot_dir = Path(project_dir) / "scenes" / shot.scene_id / "shots" / shot.id
+        shot_dir.mkdir(parents=True, exist_ok=True)
 
-        state["shot_list"][idx].video_url = video_path
+        video_path = shot_dir / "video.mp4"
+        video_path.write_bytes(response.video_bytes)
+
+        state["shot_list"][idx].video_url = str(video_path)
         state["shot_list"][idx].status = "animated"
         print(f"  Saved video: {video_path}")
     except Exception as e:
