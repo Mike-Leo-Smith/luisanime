@@ -1,7 +1,3 @@
-# ==========================================
-# Agentic Filming Pipeline - Global Config
-# ==========================================
-
 project:
   name: "my_video_project"
   description: "A cinematic adaptation of my novel"
@@ -23,42 +19,72 @@ generation:
   enable_vlm_qa: true
   save_intermediates: true
 
-# Per-agent configuration
-# Each agent MUST specify its own provider and model
-agents:
-  lore_master:
+  # Segment selection - specify which parts of the novel to animate
+  segment_selection:
+    # chapters: [1, 2, 3]
+    # natural_language:
+    #   - "the wedding scene featuring Edmond and Mercedes"
+
+# Model definitions - reusable across agents
+models:
+  # Gemini Flash for fast/cheap LLM tasks
+  gemini-flash:
     provider: "gemini"
-    model: "gemini-3.1-flash-preview"
-    api_key: "ENV:LORE_MASTER_API_KEY"
+    model: "gemini-3.1-flash-lite-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
+    max_tokens: 128000
+
+  # Gemini Pro for reasoning-heavy tasks
+  gemini-pro:
+    provider: "gemini"
+    model: "gemini-3.1-pro-preview"
+    api_key: "ENV:GEMINI_PRO_API_KEY"
+    temperature: 0.2
+    max_tokens: 128000
+
+  # MiniMax for image generation
+  minimax-image:
+    provider: "minimax"
+    model: "image-01"
+    api_key: "ENV:MINIMAX_IMAGE_API_KEY"
+    width: 1024
+    height: 1024
+
+  # MiniMax for video generation
+  minimax-video:
+    provider: "minimax"
+    model: "MiniMax-Hailuo-02"
+    api_key: "ENV:MINIMAX_VIDEO_API_KEY"
+    duration: 6
+    resolution: "1080p"
+
+# Per-agent configurations
+# Each agent references a model and can override parameters
+agents:
+  indexer:
+    model: gemini-flash
+    temperature: 0.1  # Lower for consistent metadata
+
+  lore_master:
+    model: gemini-flash
 
   screenwriter:
-    provider: "gemini"
-    model: "gemini-3.1-flash-preview"
-    api_key: "ENV:SCREENWRITER_API_KEY"
+    model: gemini-flash
     temperature: 0.3
 
   director:
-    provider: "gemini"
-    model: "gemini-3.1-pro-preview"
-    api_key: "ENV:DIRECTOR_API_KEY"
-    temperature: 0.2
+    model: gemini-pro  # Use pro for better reasoning
 
   storyboarder:
-    provider: "minimax"
-    model: "image-01"
-    api_key: "ENV:STORYBOARDER_API_KEY"
+    model: minimax-image
 
   animator:
-    provider: "minimax"
-    model: "MiniMax-Hailuo-02"
-    api_key: "ENV:ANIMATOR_API_KEY"
+    model: minimax-video
 
   qa_linter:
-    provider: "gemini"
-    model: "gemini-3.1-pro-preview"
-    api_key: "ENV:QA_LINTER_API_KEY"
-    temperature: 0.0
+    model: gemini-pro
+    temperature: 0.0  # Deterministic for QA
 
   lip_sync:
     engine: "local_musetalk"

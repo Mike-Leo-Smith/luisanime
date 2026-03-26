@@ -2,33 +2,124 @@ import json
 import time
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from .base import (
+    BaseLLMProvider,
     BaseImageProvider,
     BaseVideoProvider,
+    LLMResponse,
     ImageResponse,
     VideoResponse,
+    GenerationConfig,
     ImageGenerationConfig,
     VideoGenerationConfig,
 )
 
 
-class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
+class MiniMaxProvider(BaseLLMProvider, BaseImageProvider, BaseVideoProvider):
     def __init__(
         self,
         api_key: str,
         base_url: str = "https://api.minimaxi.com/v1",
+        model: str = "MiniMax-Text-01",
         image_model: str = "image-01",
         video_model: str = "MiniMax-Hailuo-02",
     ):
         self.api_key = api_key
         self.base_url = base_url
+        self.model = model
         self.image_model = image_model
         self.video_model = video_model
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+
+    def generate_text(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> LLMResponse:
+        config = config or GenerationConfig()
+
+        url = f"{self.base_url}/text/chatcompletion_v2"
+
+        messages: List[Dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens,
+        }
+
+        response = requests.post(url, headers=self.headers, json=payload)
+        response.raise_for_status()
+
+        data = response.json()
+        choice = data.get("choices", [{}])[0]
+        message = choice.get("message", {})
+        content = message.get("content", "")
+        usage = data.get("usage", {})
+
+        return LLMResponse(
+            text=content,
+            usage={
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+            },
+            model=self.model,
+            finish_reason=choice.get("finish_reason"),
+        )
+
+    def generate_json(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Dict[str, Any]:
+        config = config or GenerationConfig()
+        config.temperature = 0.1
+
+        json_prompt = f"{prompt}\n\nRespond with valid JSON only."
+        response = self.generate_text(json_prompt, system_prompt, config)
+
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        return json.loads(text.strip())
+
+    def generate_structured(
+        self,
+        prompt: str,
+        response_schema: Dict[str, Any],
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Dict[str, Any]:
+        config = config or GenerationConfig()
+
+        schema_prompt = f"""{prompt}
+
+You must respond with a JSON object that follows this schema:
+{json.dumps(response_schema, indent=2)}
+
+Respond with valid JSON only."""
+
+        return self.generate_json(schema_prompt, system_prompt, config)
+
+    def analyze_image(
+        self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
+    ) -> LLMResponse:
+        raise NotImplementedError("Image analysis not supported by MiniMax")
 
     def generate_image(
         self, prompt: str, config: Optional[ImageGenerationConfig] = None

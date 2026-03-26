@@ -13,7 +13,7 @@ from .base import (
 
 
 class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
-    def __init__(self, api_key: str, base_url: str, model: str = "gpt-4"):
+    def __init__(self, api_key: str, base_url: str, model: str):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
@@ -40,11 +40,15 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
             top_p=config.top_p,
         )
 
+        text = response.choices[0].message.content or ""
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+
         return LLMResponse(
-            text=response.choices[0].message.content,
+            text=text,
             usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
             model=self.model,
             finish_reason=response.choices[0].finish_reason,
@@ -71,6 +75,32 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
             text = text[:-3]
 
         return json.loads(text.strip())
+
+    def generate_structured(
+        self,
+        prompt: str,
+        response_schema: Dict[str, Any],
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Dict[str, Any]:
+        config = config or GenerationConfig()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            top_p=config.top_p,
+            response_format={"type": "json_object"},
+        )
+
+        content = response.choices[0].message.content or "{}"
+        return json.loads(content)
 
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
@@ -102,11 +132,15 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
             max_tokens=config.max_tokens,
         )
 
+        text = response.choices[0].message.content or ""
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+
         return LLMResponse(
-            text=response.choices[0].message.content,
+            text=text,
             usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
             model=self.model,
         )

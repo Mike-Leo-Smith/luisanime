@@ -32,6 +32,7 @@ class PipelineState(TypedDict):
     # Project Settings
     project_dir: str
     style: str
+    config_path: NotRequired[Optional[str]]
 
     # Narrative Context
     novel_text: str

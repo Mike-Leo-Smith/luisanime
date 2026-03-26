@@ -69,6 +69,27 @@ class BaseLLMProvider(ABC):
         pass
 
     @abstractmethod
+    def generate_structured(
+        self,
+        prompt: str,
+        response_schema: Dict[str, Any],
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Any:
+        """Generate structured output using JSON schema enforcement.
+
+        Args:
+            prompt: The input prompt
+            response_schema: JSON schema defining the expected output structure
+            system_prompt: Optional system prompt
+            config: Optional generation configuration
+
+        Returns:
+            Parsed JSON matching the schema
+        """
+        pass
+
+    @abstractmethod
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:

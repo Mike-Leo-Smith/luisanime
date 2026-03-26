@@ -11,14 +11,11 @@ class ConfigLoader:
     ROOT_CONFIG = Path("config.yaml")
 
     @classmethod
-    def load(cls, project_path: Optional[Path] = None) -> Dict[str, Any]:
+    def load(cls, project_path: Optional[Path | str] = None) -> Dict[str, Any]:
         config_paths = []
 
-        env_config = os.getenv("CONFIG_PATH")
-        if env_config:
-            config_paths.append(Path(env_config))
-
         if project_path:
+            project_path = Path(project_path)
             project_config = project_path / "config.yaml"
             if project_config.exists():
                 config_paths.append(project_config)
@@ -68,7 +65,17 @@ class ConfigLoader:
     def get_agent_config(
         cls, config: Dict[str, Any], agent_name: str
     ) -> Dict[str, Any]:
+        """
+        Get agent configuration with model reference resolved.
+
+        Resolution order:
+        1. Find model reference from agents.{agent_name}.model
+        2. Get model defaults from models.{model_name}
+        3. Apply agent-specific parameter overrides
+        """
         agents = config.get("agents", {})
+        models = config.get("models", {})
+
         agent_cfg = agents.get(agent_name, {})
 
         if not agent_cfg:
@@ -77,13 +84,31 @@ class ConfigLoader:
                 f"Available agents: {list(agents.keys())}"
             )
 
-        if "provider" not in agent_cfg:
+        # Get model reference
+        model_name = agent_cfg.get("model")
+        if not model_name:
             raise ValueError(
-                f"Agent '{agent_name}' must specify a provider in config. "
-                f"Each agent MUST have its own provider configuration."
+                f"Agent '{agent_name}' must specify a model reference. "
+                f"Example: model: gemini-flash"
             )
 
-        return agent_cfg
+        # Get model definition
+        model_def = models.get(model_name, {})
+        if not model_def:
+            raise ValueError(
+                f"Model '{model_name}' referenced by agent '{agent_name}' not found. "
+                f"Available models: {list(models.keys())}"
+            )
+
+        # Start with model definition
+        merged = model_def.copy()
+
+        # Apply agent-specific overrides (excluding 'model' key)
+        for key, value in agent_cfg.items():
+            if key != "model":
+                merged[key] = value
+
+        return merged
 
 
 def load_config(project_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -93,4 +118,5 @@ def load_config(project_path: Optional[Path] = None) -> Dict[str, Any]:
 if __name__ == "__main__":
     cfg = load_config()
     print(f"Project: {cfg['project']['name']}")
-    print(f"Director: {cfg['agents']['director']}")
+    print(f"Director: {ConfigLoader.get_agent_config(cfg, 'director')}")
+    print(f"Indexer: {ConfigLoader.get_agent_config(cfg, 'indexer')}")

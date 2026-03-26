@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, END
 from src.core.state import PipelineState
 from src.config import load_config
+from src.agents.indexer import text_segmenter
 from src.agents.pre_production import lore_master, screenwriter, director
 from src.agents.asset_locking import storyboarder
 from src.agents.production import animator, qa_linter
@@ -15,6 +16,7 @@ def advance_shot(state: PipelineState) -> PipelineState:
     return state
 
 
+workflow.add_node("text_segmenter", text_segmenter)
 workflow.add_node("lore_master", lore_master)
 workflow.add_node("screenwriter", screenwriter)
 workflow.add_node("director", director)
@@ -25,7 +27,8 @@ workflow.add_node("advance_shot", advance_shot)
 workflow.add_node("lip_sync", lip_sync_agent)
 workflow.add_node("compositor", compositor)
 
-workflow.set_entry_point("lore_master")
+workflow.set_entry_point("text_segmenter")
+workflow.add_edge("text_segmenter", "lore_master")
 workflow.add_edge("lore_master", "screenwriter")
 workflow.add_edge("screenwriter", "director")
 workflow.add_edge("director", "storyboarder")
@@ -38,7 +41,10 @@ def route_qa(state: PipelineState) -> str:
     idx = state["current_shot_index"]
     shot = state["shot_list"][idx]
 
-    config = load_config()
+    from pathlib import Path
+
+    project_dir = state.get("project_dir")
+    config = load_config(Path(project_dir) if project_dir else None)
     max_retries = config.get("generation", {}).get("max_retries_per_shot", 3)
 
     if shot.status == "approved":

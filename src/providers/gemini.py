@@ -16,7 +16,10 @@ from .base import (
 
 class GeminiProvider(BaseLLMProvider, BaseImageProvider):
     def __init__(
-        self, api_key: str, model: str = "gemini-3.1-pro", image_model: str = None
+        self,
+        api_key: str,
+        model: str,
+        image_model: Optional[str] = None,
     ):
         self.api_key = api_key
         self.model = model
@@ -47,15 +50,24 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             ),
         )
 
+        text = response.text or ""
+        prompt_tokens = (
+            int(response.usage_metadata.prompt_token_count)
+            if response.usage_metadata
+            and response.usage_metadata.prompt_token_count is not None
+            else 0
+        )
+        completion_tokens = (
+            int(response.usage_metadata.candidates_token_count)
+            if response.usage_metadata
+            and response.usage_metadata.candidates_token_count is not None
+            else 0
+        )
         return LLMResponse(
-            text=response.text,
+            text=text,
             usage={
-                "prompt_tokens": response.usage_metadata.prompt_token_count
-                if response.usage_metadata
-                else 0,
-                "completion_tokens": response.usage_metadata.candidates_token_count
-                if response.usage_metadata
-                else 0,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
             model=self.model,
             finish_reason=str(response.candidates[0].finish_reason)
@@ -85,6 +97,33 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
 
         return json.loads(text.strip())
 
+    def generate_structured(
+        self,
+        prompt: str,
+        response_schema: Dict[str, Any],
+        system_prompt: Optional[str] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Dict[str, Any]:
+        config = config or GenerationConfig()
+
+        contents = prompt
+        if system_prompt:
+            contents = f"{system_prompt}\n\n{prompt}"
+
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                temperature=config.temperature,
+                max_output_tokens=config.max_tokens,
+                top_p=config.top_p,
+                response_schema=response_schema,
+            ),
+        )
+
+        text = response.text or "{}"
+        return json.loads(text)
+
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
@@ -104,15 +143,17 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             ),
         )
 
+        text = response.text or ""
+        prompt_tokens = 0
+        completion_tokens = 0
+        if response.usage_metadata:
+            prompt_tokens = response.usage_metadata.prompt_token_count or 0
+            completion_tokens = response.usage_metadata.candidates_token_count or 0
         return LLMResponse(
-            text=response.text,
+            text=text,
             usage={
-                "prompt_tokens": response.usage_metadata.prompt_token_count
-                if response.usage_metadata
-                else 0,
-                "completion_tokens": response.usage_metadata.candidates_token_count
-                if response.usage_metadata
-                else 0,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
             model=self.model,
         )
@@ -130,6 +171,8 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             ),
         )
 
+        if not response.generated_images or len(response.generated_images) == 0:
+            raise ValueError("No image data returned")
         img = response.generated_images[0].image
         if img is None or img.image_bytes is None:
             raise ValueError("No image data returned")

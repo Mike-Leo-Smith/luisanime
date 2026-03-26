@@ -2,9 +2,40 @@
 import sys
 import argparse
 from pathlib import Path
-from src.core.project_manager import ProjectManager
+from src.core.project import ProjectManager
 from src.core.state import PipelineState
 from src.core.graph import app as pipeline_app
+
+
+def parse_segment_selection(args) -> dict:
+    """Parse CLI segment selection arguments into config dict."""
+    selection = {}
+
+    if args.segment_range:
+        # Parse character range (e.g., "0-10000") or percentage (e.g., "0.0-0.5")
+        ranges = []
+        for range_str in args.segment_range.split(","):
+            range_str = range_str.strip()
+            if ":" in range_str:
+                # Percentage format: "0:0.5"
+                start, end = range_str.split(":")
+                ranges.append([float(start), float(end)])
+            elif "-" in range_str:
+                # Character position format: "0-10000"
+                start, end = range_str.split("-")
+                ranges.append([int(start), int(end)])
+        if ":" in args.segment_range:
+            selection["percent_ranges"] = ranges
+        else:
+            selection["char_ranges"] = ranges
+
+    if args.chapters:
+        selection["chapters"] = [int(c.strip()) for c in args.chapters.split(",")]
+
+    if args.keywords:
+        selection["keywords"] = [k.strip() for k in args.keywords.split(",")]
+
+    return selection
 
 
 def create_project(args):
@@ -19,21 +50,40 @@ def create_project(args):
         }
     }
 
+    # Parse segment selection
+    segment_selection = parse_segment_selection(args)
+    if segment_selection:
+        config["generation"] = {"segment_selection": segment_selection}
+        print(f"Segment selection: {segment_selection}")
+
     novel_text = Path(args.input).read_text(encoding="utf-8")
     project_path = pm.create_project(args.name, novel_text, config)
     print(f"Created project: {project_path}")
-    print(f"Edit {project_path}/project.yaml to customize settings")
+    print(f"Edit {project_path}/config.yaml to customize settings")
 
 
-def run_pre_production(args):
+def run_indexer(args):
     pm = ProjectManager(args.projects_dir)
     pm.load_project(args.name)
     if not pm.current_project or not pm.project_config:
-        raise RuntimeError(
-            f"Failed to load project '{args.name}' or missing project configuration"
-        )
+        raise RuntimeError(f"Failed to load project '{args.name}'")
 
-    print("Running pre-production stage...")
+    from src.agents.indexer import text_segmenter
+
+    memory_dir = pm.current_project / "memory"
+    force = getattr(args, "force", False)
+    if (memory_dir / "toc.json").exists() and not force:
+        print(f"Indexer already ran. TOC exists at {memory_dir / 'toc.json'}")
+        print("Use --force to re-index.")
+        return
+
+    if force and (memory_dir / "toc.json").exists():
+        print("Force re-indexing...")
+        import shutil
+
+        shutil.rmtree(memory_dir, ignore_errors=True)
+
+    print("Running indexer...")
     novel_text = (pm.current_project / "input" / "novel.txt").read_text(
         encoding="utf-8"
     )
@@ -53,26 +103,196 @@ def run_pre_production(args):
         style=pm.project_config["video"]["style"],
     )
 
-    state = pipeline_app.invoke(initial_state)
+    result = text_segmenter(initial_state)
+    print(f"\nIndexer complete!")
+    print(f"  Project: {args.name}")
+    print(f"  TOC: {pm.current_project / 'memory' / 'toc.json'}")
 
-    pm.save_asset("pre_production", "entities.json", dict(state["entity_graph"]))
-    pm.save_asset("pre_production", "scenes.json", [s.dict() for s in state["scenes"]])
-    pm.save_asset(
-        "pre_production", "shots.json", [s.dict() for s in state["shot_list"]]
-    )
-    pm.save_checkpoint(
-        "pre_production_complete",
-        {
-            "stage": "pre_production",
-            "entities": len(state["entity_graph"]),
-            "scenes": len(state["scenes"]),
-            "shots": len(state["shot_list"]),
-        },
-    )
-    pm.log(f"Pre-production complete: {len(state['shot_list'])} shots generated")
 
-    print(f"Generated {len(state['shot_list'])} shots")
-    print(f"Assets saved to {pm.current_project / '.staging' / 'pre_production'}")
+def run_lore_master(args):
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    memory_dir = pm.current_project / "memory"
+    if not (memory_dir / "toc.json").exists():
+        print("Error: Indexer must run first. Run: python main.py index " + args.name)
+        sys.exit(1)
+
+    from src.agents.lore_master import lore_master
+    from src.core.state import PipelineState
+
+    print("Running lore master...")
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=[],
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = lore_master(initial_state)
+
+    print(f"\nLore Master complete!")
+    print(f"  Entities extracted: {len(result['entity_graph'])}")
+
+    if result["entity_graph"]:
+        print("  Sample entities:")
+        for name, entity in list(result["entity_graph"].items())[:5]:
+            print(f"    - {name}: {entity.attributes.get('type', 'unknown')}")
+
+        # Save entity graph to file
+        entity_data = {
+            name: entity.attributes for name, entity in result["entity_graph"].items()
+        }
+        pm.save_entity_graph(entity_data)
+        print(f"\n  Saved entities to: {pm.get_shared_path('entities.json')}")
+
+
+def run_screenwriter(args):
+    print(f"Screenwriter: {args.name} - Not yet implemented")
+
+
+def run_director(args):
+    print(f"Director: {args.name} - Not yet implemented")
+
+
+def run_storyboarder(args):
+    print(f"Storyboarder: {args.name} - Not yet implemented")
+
+
+def run_animator(args):
+    print(f"Animator: {args.name} - Not yet implemented")
+
+
+def run_qa_linter(args):
+    print(f"QA Linter: {args.name} - Not yet implemented")
+
+
+def _old_run_indexer(args):
+
+    from src.agents.indexer import text_segmenter
+
+    memory_dir = pm.current_project / "memory"
+    if (memory_dir / "toc.json").exists():
+        print(f"Indexer already ran. TOC exists at {memory_dir / 'toc.json'}")
+        return
+
+    print("Running indexer...")
+    novel_text = (pm.current_project / "input" / "novel.txt").read_text(
+        encoding="utf-8"
+    )
+
+    initial_state = PipelineState(
+        novel_text=novel_text,
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=[],
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = text_segmenter(initial_state)
+    print(f"\nIndexer complete!")
+    print(f"  Project: {args.name}")
+    print(f"  TOC: {pm.current_project / 'memory' / 'toc.json'}")
+
+
+def run_pre_production(args):
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    print("Running pre-production stage...")
+
+    # Check if indexer has already run
+    memory_path = pm.current_project / "memory" / "chapters.json"
+    if not memory_path.exists():
+        print("Indexer not run yet. Running indexer first...")
+        from src.agents.indexer import text_segmenter
+
+        novel_text = (pm.current_project / "input" / "novel.txt").read_text(
+            encoding="utf-8"
+        )
+
+        initial_state = PipelineState(
+            novel_text=novel_text,
+            current_chapter_id=args.name,
+            entity_graph={},
+            scenes=[],
+            current_scene_index=0,
+            shot_list=[],
+            current_shot_index=0,
+            retry_count=0,
+            last_error=None,
+            approved_clips=[],
+            project_dir=str(pm.current_project),
+            style=pm.project_config["video"]["style"],
+        )
+
+        state = text_segmenter(initial_state)
+        print(f"Indexer complete. Chapters segmented.")
+        print(f"Chapter DB: {pm.current_project / 'memory' / 'chapters.json'}")
+    else:
+        print(f"Using existing chapter DB: {memory_path}")
+
+    if stage == "indexer":
+        print("Indexer stage complete.")
+        return
+
+    # TODO: Add support for running individual stages (lore_master, screenwriter, director)
+    # For now, run full pipeline if stage is not indexer
+    if stage == "all":
+        print("Running full pre-production pipeline...")
+        # Load the (possibly indexed) text
+        from src.agents.indexer import ChapterDB
+
+        db = ChapterDB(memory_path)
+        chapters = db.get_all_chapters()
+
+        if chapters:
+            # Use first chapter's text for now
+            novel_text = chapters[0].text
+        else:
+            novel_text = (pm.current_project / "input" / "novel.txt").read_text(
+                encoding="utf-8"
+            )
+
+        initial_state = PipelineState(
+            novel_text=novel_text,
+            current_chapter_id=args.name,
+            entity_graph={},
+            scenes=[],
+            current_scene_index=0,
+            shot_list=[],
+            current_shot_index=0,
+            retry_count=0,
+            last_error=None,
+            approved_clips=[],
+            project_dir=str(pm.current_project),
+            style=pm.project_config["video"]["style"],
+        )
+
+        state = pipeline_app.invoke(initial_state)
+        print(f"Generated {len(state['shot_list'])} shots")
+    else:
+        print(f"Stage '{stage}' not yet implemented. Run 'indexer' or 'all'.")
 
 
 def generate_assets(args):
@@ -115,7 +335,7 @@ def generate_assets(args):
             style=pm.project_config["video"]["style"],
         )
 
-        from src.agents.asset_locking import storyboarder
+        from src.agents.storyboarder import storyboarder
 
         result = storyboarder(state)
 
@@ -185,7 +405,8 @@ def run_production(args):
         for attempt in range(max_retries):
             print(f"  Attempt {attempt + 1}/{max_retries}...")
 
-            from src.agents.production import animator, qa_linter
+            from src.agents.animator import animator
+from src.agents.qa_linter import qa_linter
 
             state = animator(state)
             video_url = state["shot_list"][i].video_url
@@ -264,7 +485,7 @@ def run_post_production(args):
         style=pm.project_config["video"]["style"],
     )
 
-    from src.agents.post_production import compositor
+    from src.agents.compositor import compositor
 
     result = compositor(state)
 
@@ -327,9 +548,69 @@ def main():
     )
     create_parser.add_argument("--fps", type=int, default=24)
     create_parser.add_argument("--max-shots", type=int, default=10)
+    create_parser.add_argument(
+        "--segment-range",
+        type=str,
+        help="Character range to animate (e.g., '0-10000' or '0:1.0' for percentage)",
+    )
+    create_parser.add_argument(
+        "--chapters",
+        type=str,
+        help="Comma-separated list of chapter numbers to animate (e.g., '1,2,3')",
+    )
+    create_parser.add_argument(
+        "--keywords",
+        type=str,
+        help="Comma-separated keywords to select relevant paragraphs",
+    )
     create_parser.set_defaults(func=create_project)
 
-    pre_parser = subparsers.add_parser("pre-prod", help="Run pre-production stage")
+    indexer_parser = subparsers.add_parser(
+        "indexer", aliases=["index"], help="Index novel into chapters"
+    )
+    indexer_parser.add_argument("name", help="Project name")
+    indexer_parser.add_argument(
+        "--force", action="store_true", help="Force re-indexing"
+    )
+    indexer_parser.set_defaults(func=run_indexer)
+
+    lore_parser = subparsers.add_parser(
+        "lore-master", aliases=["lore"], help="Extract entities (lore master)"
+    )
+    lore_parser.add_argument("name", help="Project name")
+    lore_parser.set_defaults(func=run_lore_master)
+
+    scenes_parser = subparsers.add_parser(
+        "screenwriter", aliases=["scenes"], help="Generate scenes (screenwriter)"
+    )
+    scenes_parser.add_argument("name", help="Project name")
+    scenes_parser.set_defaults(func=run_screenwriter)
+
+    shots_parser = subparsers.add_parser(
+        "director", aliases=["shots"], help="Generate shots (director)"
+    )
+    shots_parser.add_argument("name", help="Project name")
+    shots_parser.set_defaults(func=run_director)
+
+    storyboard_parser = subparsers.add_parser(
+        "storyboarder", aliases=["storyboard"], help="Generate keyframes (storyboarder)"
+    )
+    storyboard_parser.add_argument("name", help="Project name")
+    storyboard_parser.set_defaults(func=run_storyboarder)
+
+    animate_parser = subparsers.add_parser(
+        "animator", aliases=["animate"], help="Generate videos (animator)"
+    )
+    animate_parser.add_argument("name", help="Project name")
+    animate_parser.set_defaults(func=run_animator)
+
+    qa_parser = subparsers.add_parser(
+        "qa-linter", aliases=["qa"], help="Run QA on videos (qa-linter)"
+    )
+    qa_parser.add_argument("name", help="Project name")
+    qa_parser.set_defaults(func=run_qa_linter)
+
+    pre_parser = subparsers.add_parser("pre-prod", help="Run full pre-production")
     pre_parser.add_argument("name", help="Project name")
     pre_parser.set_defaults(func=run_pre_production)
 
