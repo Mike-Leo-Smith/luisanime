@@ -5,11 +5,27 @@ from src.providers.base import ImageGenerationConfig
 from src.agents.prompts import STORYBOARDER_SYSTEM_PROMPT
 
 
+def get_video_dimensions(config: dict) -> tuple[int, int]:
+    video_cfg = config.get("video", {})
+    resolution = video_cfg.get("resolution", "1080p")
+
+    resolution_map = {
+        "720p": (1280, 720),
+        "1080p": (1920, 1080),
+        "4k": (3840, 2160),
+        "1:1": (1024, 1024),
+        "16:9": (1920, 1080),
+        "9:16": (1080, 1920),
+    }
+
+    return resolution_map.get(resolution, (1920, 1080))
+
+
 def storyboarder(state: PipelineState) -> PipelineState:
     idx = state["current_shot_index"]
     shot = state["shot_list"][idx]
 
-    print(f"--- STORYBOARDER: Generating Keyframe for Shot {shot.id} ---")
+    print(f"--- STORYBOARDER: Generating Keyframes for Shot {shot.id} ---")
 
     project_dir = state.get("project_dir", "./workspace")
 
@@ -35,6 +51,9 @@ def storyboarder(state: PipelineState) -> PipelineState:
             llm = get_llm_provider(state, "director")
             image_gen = get_image_provider(state, "storyboarder")
 
+        shot_dir = Path(project_dir) / "scenes" / shot.scene_id / "shots" / shot.id
+        shot_dir.mkdir(parents=True, exist_ok=True)
+
         optimization_prompt = f"""{STORYBOARDER_SYSTEM_PROMPT}
 
 Director's visual description:
@@ -51,18 +70,28 @@ Optimize this into a dense, high-quality image generation prompt."""
         optimized_prompt = optimized_response.text.strip()
         print(f"  Optimized: {optimized_prompt[:80]}...")
 
-        gen_config = ImageGenerationConfig(width=1024, height=1024, num_images=1)
-        response = image_gen.generate_image(optimized_prompt, gen_config)
+        state["shot_list"][idx].optimized_prompt = optimized_prompt
 
-        shot_dir = Path(project_dir) / "scenes" / shot.scene_id / "shots" / shot.id
-        shot_dir.mkdir(parents=True, exist_ok=True)
+        width, height = get_video_dimensions(config) if config else (1920, 1080)
+        print(f"  Using video dimensions: {width}x{height}")
+        gen_config = ImageGenerationConfig(width=width, height=height, num_images=1)
 
-        filepath = shot_dir / "keyframe.png"
-        filepath.write_bytes(response.image_bytes)
+        print("  Generating begin keyframe...")
+        response_begin = image_gen.generate_image(optimized_prompt, gen_config)
+        filepath_begin = shot_dir / "keyframe_begin.png"
+        filepath_begin.write_bytes(response_begin.image_bytes)
+        state["shot_list"][idx].keyframe_begin_url = str(filepath_begin)
+        print(f"  Saved begin keyframe: {filepath_begin}")
 
-        state["shot_list"][idx].keyframe_url = str(filepath)
+        end_frame_prompt = f"{optimized_prompt}, end of motion, final pose"
+        print("  Generating end keyframe...")
+        response_end = image_gen.generate_image(end_frame_prompt, gen_config)
+        filepath_end = shot_dir / "keyframe_end.png"
+        filepath_end.write_bytes(response_end.image_bytes)
+        state["shot_list"][idx].keyframe_end_url = str(filepath_end)
+        print(f"  Saved end keyframe: {filepath_end}")
+
         state["shot_list"][idx].status = "storyboarded"
-        print(f"  Saved keyframe: {filepath}")
     except Exception as e:
         print(f"Error in storyboarder: {e}")
         state["last_error"] = str(e)

@@ -21,11 +21,13 @@ class Shot(BaseModel):
     id: str
     scene_id: str
     prompt: str
+    optimized_prompt: Optional[str] = None
     camera_movement: str
     duration: float
-    keyframe_url: Optional[str] = None
+    keyframe_begin_url: Optional[str] = None
+    keyframe_end_url: Optional[str] = None
     video_url: Optional[str] = None
-    status: str = "pending"  # pending, storyboarded, animated, qa_failed, approved
+    status: str = "pending"
 
 
 class PipelineState(TypedDict):
