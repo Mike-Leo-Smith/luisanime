@@ -300,7 +300,8 @@ def run_storyboarder(args):
     shots_data = json.loads(shots_file.read_text(encoding="utf-8"))
     shots = [Shot(**s) for s in shots_data]
 
-    print(f"Generating keyframes for {len(shots)} shots...")
+    pending_shots = [s for s in shots if s.status == "pending"]
+    print(f"Generating keyframes for {len(pending_shots)} shots...")
 
     initial_state = PipelineState(
         novel_text="",
@@ -318,11 +319,13 @@ def run_storyboarder(args):
         config=pm.project_config,
     )
 
-    result = storyboarder(initial_state)
+    for i in range(len(pending_shots)):
+        initial_state["current_shot_index"] = i
+        result = storyboarder(initial_state)
 
-    if result.get("last_error"):
-        print(f"\nError: {result['last_error']}")
-        sys.exit(1)
+        if result.get("last_error"):
+            print(f"\nError on shot {i + 1}: {result['last_error']}")
+            continue
 
     updated_shots = []
     for shot in result["shot_list"]:
