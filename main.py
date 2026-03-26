@@ -279,15 +279,168 @@ def run_director(args):
 
 
 def run_storyboarder(args):
-    print(f"Storyboarder: {args.name} - Not yet implemented")
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.storyboarder import storyboarder
+    from src.core.state import PipelineState, Shot
+
+    shots_file = pm.current_project / "scenes" / "shots" / "shots.json"
+    if not shots_file.exists():
+        print("Error: No shots found. Run: python main.py shots " + args.name)
+        sys.exit(1)
+
+    import json
+
+    shots_data = json.loads(shots_file.read_text(encoding="utf-8"))
+    shots = [Shot(**s) for s in shots_data]
+
+    print(f"Generating keyframes for {len(shots)} shots...")
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=shots,
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = storyboarder(initial_state)
+
+    if result.get("last_error"):
+        print(f"\nError: {result['last_error']}")
+        sys.exit(1)
+
+    updated_shots = []
+    for shot in result["shot_list"]:
+        updated_shots.append(
+            {
+                "id": shot.id,
+                "scene_id": shot.scene_id,
+                "prompt": shot.prompt,
+                "camera_movement": shot.camera_movement,
+                "duration": shot.duration,
+                "status": shot.status,
+                "keyframe_url": shot.keyframe_url,
+            }
+        )
+
+    shots_file.write_text(
+        json.dumps(updated_shots, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    print(f"\nStoryboarder complete!")
+    print(
+        f"  Keyframes generated: {len([s for s in result['shot_list'] if s.status == 'storyboarded'])}"
+    )
 
 
 def run_animator(args):
-    print(f"Animator: {args.name} - Not yet implemented")
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.animator import animator
+    from src.core.state import PipelineState, Shot
+
+    shots_file = pm.current_project / "scenes" / "shots" / "shots.json"
+    if not shots_file.exists():
+        print("Error: No shots found. Run: python main.shots " + args.name)
+        sys.exit(1)
+
+    import json
+
+    shots_data = json.loads(shots_file.read_text(encoding="utf-8"))
+    shots = [Shot(**s) for s in shots_data]
+
+    pending_shots = [s for s in shots if s.status == "storyboarded"]
+    print(f"Animating {len(pending_shots)} shots...")
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=shots,
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    for i in range(len(pending_shots)):
+        initial_state["current_shot_index"] = i
+        result = animator(initial_state)
+
+        if result.get("last_error"):
+            print(f"\nError on shot {i + 1}: {result['last_error']}")
+            continue
+
+    print(f"\nAnimator complete!")
 
 
 def run_qa_linter(args):
-    print(f"QA Linter: {args.name} - Not yet implemented")
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.qa_linter import qa_linter
+    from src.core.state import PipelineState, Shot
+
+    shots_file = pm.current_project / "scenes" / "shots" / "shots.json"
+    if not shots_file.exists():
+        print("Error: No shots found. Run: python main.py animate " + args.name)
+        sys.exit(1)
+
+    import json
+
+    shots_data = json.loads(shots_file.read_text(encoding="utf-8"))
+    shots = [Shot(**s) for s in shots_data]
+
+    animated_shots = [s for s in shots if s.status == "animated"]
+    print(f"QA checking {len(animated_shots)} shots...")
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=shots,
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    for i in range(len(animated_shots)):
+        initial_state["current_shot_index"] = i
+        result = qa_linter(initial_state)
+
+        if result.get("last_error"):
+            print(f"\nError on shot {i + 1}: {result['last_error']}")
+            continue
+
+    approved_count = len([s for s in result["shot_list"] if s.status == "approved"])
+    print(f"\nQA Linter complete!")
+    print(f"  Approved: {approved_count}")
+    print(f"  Rejected: {len(animated_shots) - approved_count}")
 
 
 def _old_run_indexer(args):
