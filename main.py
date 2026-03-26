@@ -337,7 +337,9 @@ def run_storyboarder(args):
                 "camera_movement": shot.camera_movement,
                 "duration": shot.duration,
                 "status": shot.status,
-                "keyframe_url": shot.keyframe_url,
+                "optimized_prompt": shot.optimized_prompt,
+                "keyframe_begin_url": shot.keyframe_begin_url,
+                "keyframe_end_url": shot.keyframe_end_url,
             }
         )
 
@@ -624,10 +626,11 @@ def generate_assets(args):
             {
                 "shot_id": shot.id,
                 "index": i,
-                "keyframe_url": result["shot_list"][i].keyframe_url,
+                "keyframe_begin_url": result["shot_list"][i].keyframe_begin_url,
+                "keyframe_end_url": result["shot_list"][i].keyframe_end_url,
             },
         )
-        pm.log(f"Generated keyframe for shot {shot.id}")
+        pm.log(f"Generated keyframes for shot {shot.id}")
 
     print(
         f"\nKeyframes saved to {pm.current_project / '.staging' / 'assets' / 'keyframes'}"
