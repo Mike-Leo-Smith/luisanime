@@ -4,7 +4,7 @@ from src.core.state import PipelineState, Shot
 from src.core.graph import animator
 
 def test_animator_generates_video():
-    with patch("src.core.graph.load_config") as mock_config_load:
+    with patch("src.agents.production.load_config") as mock_config_load:
         mock_cfg = MagicMock()
         mock_cfg.render_plane.animator.api_key = "fake_key"
         mock_config_load.return_value = mock_cfg
@@ -33,7 +33,7 @@ def test_animator_generates_video():
         }
         
         # Mocking the actual video generation (e.g., Veo via Hailuo/Google)
-        with patch("src.core.graph.generate_video_clip") as mock_gen:
+        with patch("src.agents.production.generate_video_clip") as mock_gen:
             mock_gen.return_value = "https://example.com/shot_1_1.mp4"
             
             # Act

@@ -1,8 +1,12 @@
 import os
+from dotenv import load_dotenv
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import yaml
+
+load_dotenv()  # Load from .env
+
 
 class Provider(str, Enum):
     GOOGLE = "google"
@@ -12,13 +16,14 @@ class Provider(str, Enum):
     LUMA = "luma"
     RUNWAY = "runway"
 
+
 class ModelConfig(BaseModel):
     provider: Provider
     model: str
     api_key: str
     temperature: float = 0.7
 
-    @validator("api_key", pre=True)
+    @field_validator("api_key", mode="before")
     def resolve_env_vars(cls, v):
         if isinstance(v, str) and v.startswith("ENV:"):
             env_var = v[4:]
@@ -30,22 +35,27 @@ class ModelConfig(BaseModel):
             return val
         return v
 
+
 class ProjectConfig(BaseModel):
     name: str
     workspace_dir: str
     log_level: str = "INFO"
 
+
 class MemoryDBConfig(BaseModel):
     type: str
     url: str
+
 
 class ControlPlaneConfig(BaseModel):
     memory_db: MemoryDBConfig
     agents: Dict[str, ModelConfig]
 
+
 class PipelineSettings(BaseModel):
     max_retries_per_shot: int = 3
     candidates_per_take: int = 3
+
 
 class AnimatorConfig(BaseModel):
     provider: str
@@ -53,7 +63,7 @@ class AnimatorConfig(BaseModel):
     api_key: str
     pipeline_settings: PipelineSettings
 
-    @validator("api_key", pre=True)
+    @field_validator("api_key", mode="before")
     def resolve_env_vars(cls, v):
         if isinstance(v, str) and v.startswith("ENV:"):
             env_var = v[4:]
@@ -63,12 +73,15 @@ class AnimatorConfig(BaseModel):
             return val
         return v
 
+
 class RenderPlaneConfig(BaseModel):
     storyboarder: ModelConfig
     animator: AnimatorConfig
 
+
 class PostProcessingConfig(BaseModel):
     lip_sync: Dict[str, str]
+
 
 class GlobalConfig(BaseModel):
     project: ProjectConfig
@@ -76,10 +89,12 @@ class GlobalConfig(BaseModel):
     render_plane: RenderPlaneConfig
     post_processing: PostProcessingConfig
 
+
 def load_config(path: str = "config.yaml") -> GlobalConfig:
     with open(path, "r") as f:
         config_data = yaml.safe_load(f)
     return GlobalConfig(**config_data)
+
 
 if __name__ == "__main__":
     # Test loading

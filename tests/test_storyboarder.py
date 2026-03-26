@@ -3,15 +3,14 @@ from unittest.mock import MagicMock, patch
 from src.core.state import PipelineState, Shot
 from src.core.graph import storyboarder
 
-@patch("src.core.graph.ChatGoogleGenerativeAI")
-def test_storyboarder_generates_keyframe(mock_llm):
+def test_storyboarder_generates_keyframe():
     # For Storyboarder, we need to mock whatever image API we use.
     # If we use a LangChain-compatible image model or a custom wrapper.
     # Let's assume for now we use a custom utility or the same Gemini 
     # model to "describe" the image and a mock image generator.
     
     # Let's mock a hypothetical Image API call
-    with patch("src.core.graph.load_config") as mock_config_load:
+    with patch("src.agents.asset_locking.load_config") as mock_config_load:
         mock_cfg = MagicMock()
         mock_cfg.render_plane.storyboarder.api_key = "fake_key"
         mock_config_load.return_value = mock_cfg
@@ -44,7 +43,7 @@ def test_storyboarder_generates_keyframe(mock_llm):
         
         # Mocking the actual image generation (e.g., Nano Banana 2 via Google API)
         # We'll need a real implementation in graph.py
-        with patch("src.core.graph.generate_image_keyframe") as mock_gen:
+        with patch("src.agents.asset_locking.generate_image_keyframe") as mock_gen:
             mock_gen.return_value = "https://example.com/keyframe.jpg"
             
             # Act

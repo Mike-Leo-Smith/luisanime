@@ -15,29 +15,29 @@ control_plane:
   agents:
     director_node:
       provider: "google"
-      model: "gemini-3.1-pro"
+      model: "gemini-3.1-pro-preview"
       api_key: "ENV:GEMINI_API_KEY"
       temperature: 0.2
       
     qa_linter:
       provider: "google"
-      model: "gemini-3.1-pro"
+      model: "gemini-3.1-pro-preview"
       api_key: "ENV:GEMINI_API_KEY"
       temperature: 0.0  # Zero temperature for deterministic assertions
 
 render_plane:
   storyboarder:
     provider: "google"
-    model: "nano-banana-2"
+    model: "imagen-4.0-generate-001"
     api_key: "ENV:GEMINI_API_KEY"
     
   animator:
-    provider: "hailuo" # Modular: Switch to 'veo', 'sora', or 'kling' as needed
-    model: "hailuo-video-v1"
+    provider: "hailuo"
+    model: "MiniMax-Hailuo-02"
     api_key: "ENV:VIDEO_API_KEY"
     pipeline_settings:
       max_retries_per_shot: 3
-      candidates_per_take: 3
+      candidates_per_take: 1
 
 post_processing:
   lip_sync:

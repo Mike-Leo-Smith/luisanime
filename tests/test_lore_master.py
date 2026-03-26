@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from src.core.state import PipelineState
 from src.core.graph import lore_master
 
-@patch("src.core.graph.ChatGoogleGenerativeAI")
+@patch("src.agents.pre_production.ChatGoogleGenerativeAI")
 def test_lore_master_extracts_entities(mock_llm):
     # Setup mock response
     mock_instance = mock_llm.return_value

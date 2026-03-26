@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from src.core.state import PipelineState, SceneIR, Shot
 from src.core.graph import director
 
-@patch("src.core.graph.ChatGoogleGenerativeAI")
+@patch("src.agents.pre_production.ChatGoogleGenerativeAI")
 def test_director_generates_shot_list(mock_llm):
     # Setup mock response
     mock_instance = mock_llm.return_value
