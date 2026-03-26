@@ -1,0 +1,11 @@
+langgraph
+langchain
+langchain-google-genai
+langchain-openai
+langchain-anthropic
+pydantic
+pyyaml
+redis
+pymongo
+ffmpeg-python
+python-dotenv
