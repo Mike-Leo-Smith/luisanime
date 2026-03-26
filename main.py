@@ -227,10 +227,10 @@ def run_director(args):
     ]
 
     initial_state = PipelineState(
-        novel_text="",
+        novel_text=novel_text,
         current_chapter_id=args.name,
         entity_graph={},
-        scenes=scenes,
+        scenes=[],
         current_scene_index=0,
         shot_list=[],
         current_shot_index=0,
@@ -239,6 +239,7 @@ def run_director(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+        config=pm.project_config,
     )
 
     result = director(initial_state)
