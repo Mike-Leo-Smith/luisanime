@@ -70,18 +70,18 @@ def run_indexer(args):
 
     from src.agents.indexer import text_segmenter
 
-    memory_dir = pm.current_project / "memory"
+    index_dir = pm.current_project / "memory"
     force = getattr(args, "force", False)
-    if (memory_dir / "toc.json").exists() and not force:
-        print(f"Indexer already ran. TOC exists at {memory_dir / 'toc.json'}")
+    if (index_dir / "toc.json").exists() and not force:
+        print(f"Indexer already ran. TOC exists at {index_dir / 'toc.json'}")
         print("Use --force to re-index.")
         return
 
-    if force and (memory_dir / "toc.json").exists():
+    if force and (index_dir / "toc.json").exists():
         print("Force re-indexing...")
         import shutil
 
-        shutil.rmtree(memory_dir, ignore_errors=True)
+        shutil.rmtree(index_dir, ignore_errors=True)
 
     print("Running indexer...")
     novel_text = (pm.current_project / "src" / "novel.txt").read_text(encoding="utf-8")
@@ -113,8 +113,8 @@ def run_lore_master(args):
     if not pm.current_project or not pm.project_config:
         raise RuntimeError(f"Failed to load project '{args.name}'")
 
-    memory_dir = pm.current_project / "memory"
-    if not (memory_dir / "toc.json").exists():
+    index_dir = pm.current_project / "index"
+    if not (index_dir / "toc.json").exists():
         print("Error: Indexer must run first. Run: python main.py index " + args.name)
         sys.exit(1)
 
@@ -153,7 +153,7 @@ def run_lore_master(args):
             name: entity.attributes for name, entity in result["entity_graph"].items()
         }
         pm.save_entity_graph(entity_data)
-        print(f"\n  Saved entities to: {pm.get_shared_path('entities.json')}")
+        print(f"\n  Saved entities to: {pm.get_assets_path('lore', 'entities.json')}")
 
 
 def run_screenwriter(args):
@@ -180,9 +180,9 @@ def _old_run_indexer(args):
 
     from src.agents.indexer import text_segmenter
 
-    memory_dir = pm.current_project / "memory"
-    if (memory_dir / "toc.json").exists():
-        print(f"Indexer already ran. TOC exists at {memory_dir / 'toc.json'}")
+    index_dir = pm.current_project / "memory"
+    if (index_dir / "toc.json").exists():
+        print(f"Indexer already ran. TOC exists at {index_dir / 'toc.json'}")
         return
 
     print("Running indexer...")
@@ -218,8 +218,8 @@ def run_pre_production(args):
     print("Running pre-production stage...")
 
     # Check if indexer has already run
-    memory_path = pm.current_project / "memory" / "chapters.json"
-    if not memory_path.exists():
+    index_path = pm.current_project / "index" / "chapters.json"
+    if not index_path.exists():
         print("Indexer not run yet. Running indexer first...")
         from src.agents.indexer import text_segmenter
 
@@ -244,9 +244,9 @@ def run_pre_production(args):
 
         state = text_segmenter(initial_state)
         print(f"Indexer complete. Chapters segmented.")
-        print(f"Chapter DB: {pm.current_project / 'memory' / 'chapters.json'}")
+        print(f"Chapter DB: {pm.current_project / 'index' / 'chapters.json'}")
     else:
-        print(f"Using existing chapter DB: {memory_path}")
+        print(f"Using existing chapter DB: {index_path}")
 
     if stage == "indexer":
         print("Indexer stage complete.")
@@ -259,7 +259,7 @@ def run_pre_production(args):
         # Load the (possibly indexed) text
         from src.agents.indexer import ChapterDB
 
-        db = ChapterDB(memory_path)
+        db = ChapterDB(index_path)
         chapters = db.get_all_chapters()
 
         if chapters:
