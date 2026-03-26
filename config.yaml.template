@@ -70,7 +70,7 @@ agents:
     temperature: 0.3
 
   director:
-    model: gemini-pro  # Use pro for better reasoning
+    model: gemini-flash
 
   storyboarder:
     model: minimax-image
