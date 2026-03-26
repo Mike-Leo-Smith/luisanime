@@ -119,3 +119,26 @@ SHOT_SCHEMA = {
         "required": ["id", "scene_id", "prompt", "camera_movement", "duration"],
     },
 }
+
+CHAPTER_BOUNDARY_SCHEMA = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "chapter_number": {
+                "type": "INTEGER",
+                "description": "Sequential chapter number (1, 2, 3, etc.)",
+            },
+            "chapter_title": {
+                "type": "STRING",
+                "description": "The chapter title if available",
+                "nullable": True,
+            },
+            "start_marker": {
+                "type": "STRING",
+                "description": "The exact text that marks the chapter start (first 50 chars)",
+            },
+        },
+        "required": ["chapter_number", "start_marker"],
+    },
+}

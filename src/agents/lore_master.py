@@ -27,7 +27,7 @@ Summary: {chapter.metadata.summary or "N/A"}
 
 Text:
 ---
-{chapter.text[:3000]}
+{chapter.text[:100000]}
 ---"""
 
             try:

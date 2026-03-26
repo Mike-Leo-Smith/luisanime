@@ -195,39 +195,64 @@ class ChapterDB:
 
 
 def detect_chapter_boundaries(
-    text: str,
+    text: str, provider
 ) -> List[tuple[int, int, Optional[str], Optional[int]]]:
-    patterns = [
-        r"(?:^|\n\n)(?:Chapter|CHAPTER)[\s]+(\d+|\w+)[\s]*[:\-\.]?[\s]*([^\n]*)",
-        r"(?:^|\n\n)第[\s]*(\d+|[一二三四五六七八九十百]+)[\s]*章[\s]*[:\-\.]?\s*([^\n]*)",
-        r"(?:^|\n\n)Chapter[\s]+([IVXLC]+)[\s]*[:\-\.]?\s*([^\n]*)",
-    ]
+    """Use LLM to detect chapter boundaries in the novel text."""
 
-    chapter_starts = []
+    prompt = f"""Analyze the following novel text and identify all chapter boundaries.
 
-    for pattern in patterns:
-        for match in re.finditer(pattern, text, re.MULTILINE):
-            chapter_num = match.group(1)
-            chapter_title = match.group(2).strip()
+Novel text (first 100k chars):
+---
+{text[:100000]}
+---
 
-            try:
-                chapter_number = int(chapter_num)
-            except ValueError:
-                chapter_number = None
+Identify each chapter by:
+1. Its sequential number (1, 2, 3, etc.)
+2. Its title if present
+3. The exact start marker text (first 50 characters of the chapter start)
 
-            chapter_starts.append((match.start(), chapter_number, chapter_title))
+Return the chapters in order as they appear in the text."""
 
-    if not chapter_starts:
+    try:
+        from src.schemas import CHAPTER_BOUNDARY_SCHEMA
+
+        chapters_data = provider.generate_structured(
+            prompt=prompt, response_schema=CHAPTER_BOUNDARY_SCHEMA
+        )
+
+        boundaries = []
+        for i, ch in enumerate(chapters_data):
+            start_marker = ch.get("start_marker", "")
+            # Find the position of the start marker in the text
+            start_pos = text.find(start_marker)
+            if start_pos == -1:
+                # Fallback: estimate position based on chapter number
+                start_pos = (len(text) // len(chapters_data)) * i
+
+            # Find end position (start of next chapter or end of text)
+            if i + 1 < len(chapters_data):
+                next_marker = chapters_data[i + 1].get("start_marker", "")
+                end_pos = text.find(next_marker)
+                if end_pos == -1:
+                    end_pos = (len(text) // len(chapters_data)) * (i + 1)
+            else:
+                end_pos = len(text)
+
+            boundaries.append(
+                (
+                    start_pos,
+                    end_pos,
+                    ch.get("chapter_title"),
+                    ch.get("chapter_number", i + 1),
+                )
+            )
+
+        return boundaries
+
+    except Exception as e:
+        print(f"    LLM chapter detection failed: {e}")
+        # Fallback: treat entire text as single chapter
         return [(0, len(text), None, 1)]
-
-    chapter_starts.sort(key=lambda x: x[0])
-
-    boundaries = []
-    for i, (start, num, title) in enumerate(chapter_starts):
-        end = chapter_starts[i + 1][0] if i + 1 < len(chapter_starts) else len(text)
-        boundaries.append((start, end, title, num if num else i + 1))
-
-    return boundaries
 
 
 def extract_chapter_metadata(
@@ -237,7 +262,7 @@ def extract_chapter_metadata(
 
 Chapter text (first 3000 chars):
 ---
-{chapter_text[:3000]}
+{chapter_text[:100000]}
 ---
 
 Extract the chapter metadata following the JSON schema."""
@@ -333,8 +358,11 @@ def text_segmenter(state: PipelineState) -> PipelineState:
 
     print(f"  Full novel length: {len(novel_text)} characters")
 
-    print("  Detecting chapter boundaries...")
-    boundaries = detect_chapter_boundaries(novel_text)
+    print("  Detecting chapter boundaries using LLM...")
+    config = load_config(Path(project_dir) if project_dir else None)
+    model_cfg = ConfigLoader.get_agent_config(config, "indexer")
+    provider = ProviderFactory.create_llm(model_cfg)
+    boundaries = detect_chapter_boundaries(novel_text, provider)
     print(f"  Found {len(boundaries)} chapter(s)")
 
     db = ChapterDB(db_path)

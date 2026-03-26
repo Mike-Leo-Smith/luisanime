@@ -23,7 +23,7 @@ Characters in chapter: {", ".join(chapter.metadata.characters[:10]) if chapter.m
 
 Text:
 ---
-{chapter.text[:8000]}
+{chapter.text[:100000]}
 ---"""
 
             try:
