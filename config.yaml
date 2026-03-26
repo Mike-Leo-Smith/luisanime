@@ -23,22 +23,24 @@ generation:
   enable_vlm_qa: true
   save_intermediates: true
 
+# Per-agent configuration
+# Each agent MUST specify its own provider and model
 agents:
   lore_master:
     provider: "gemini"
-    model: "gemini-3.1-pro"
+    model: "gemini-3.1-flash-preview"
     api_key: "ENV:LORE_MASTER_API_KEY"
     temperature: 0.2
 
   screenwriter:
     provider: "gemini"
-    model: "gemini-3.1-pro"
+    model: "gemini-3.1-flash-preview"
     api_key: "ENV:SCREENWRITER_API_KEY"
     temperature: 0.3
 
   director:
     provider: "gemini"
-    model: "gemini-3.1-pro"
+    model: "gemini-3.1-pro-preview"
     api_key: "ENV:DIRECTOR_API_KEY"
     temperature: 0.2
 
@@ -54,7 +56,7 @@ agents:
 
   qa_linter:
     provider: "gemini"
-    model: "gemini-3.1-pro"
+    model: "gemini-3.1-pro-preview"
     api_key: "ENV:QA_LINTER_API_KEY"
     temperature: 0.0
 
@@ -84,19 +86,6 @@ style_presets:
     prompt_prefix: "Cyberpunk anime style."
     prompt_suffix: "Neon lights, rain-soaked streets, futuristic cityscape, dark atmosphere."
 
-providers:
-  gemini:
-    base_url: "https://generativelanguage.googleapis.com"
-
-  openai:
-    base_url: "https://api.openai.com/v1"
-
-  minimax:
-    base_url: "https://api.minimaxi.com/v1"
-
-  anthropic:
-    base_url: "https://api.anthropic.com"
-
 memory:
   type: "local"
   checkpoint_interval: 1
@@ -105,55 +94,3 @@ logging:
   level: "INFO"
   save_prompts: true
   save_api_responses: false
-    
-  compositor:
-    ffmpeg_preset: "slow"            # slow, medium, fast
-    codec: "libx264"
-    crf: 18                           # quality (0-51, lower is better)
-
-# Style presets for prompts
-style_presets:
-  anime:
-    prompt_prefix: "High-quality 3D anime style."
-    prompt_suffix: "Studio Ghibli inspired, vibrant colors, clean lines, soft lighting."
-    
-  cinematic:
-    prompt_prefix: "Cinematic live-action style."
-    prompt_suffix: "Dramatic lighting, film grain, 35mm aesthetic, professional color grading."
-    
-  realistic:
-    prompt_prefix: "Photorealistic style."
-    prompt_suffix: "Hyper-detailed, 8K resolution, realistic textures, natural lighting."
-    
-  cyberpunk:
-    prompt_prefix: "Cyberpunk anime style."
-    prompt_suffix: "Neon lights, rain-soaked streets, futuristic cityscape, dark atmosphere."
-
-# Provider defaults (fallback if not specified per-agent)
-providers:
-  gemini:
-    api_key: "ENV:GEMINI_API_KEY"
-    base_url: "https://generativelanguage.googleapis.com"
-    
-  openai:
-    api_key: "ENV:OPENAI_API_KEY"
-    base_url: "https://api.openai.com/v1"
-    
-  minimax:
-    api_key: "ENV:MINIMAX_API_KEY"
-    base_url: "https://api.minimaxi.com/v1"
-    
-  anthropic:
-    api_key: "ENV:ANTHROPIC_API_KEY"
-    base_url: "https://api.anthropic.com"
-
-# Memory and persistence
-memory:
-  type: "local"                     # local, redis, mongodb
-  checkpoint_interval: 1            # save checkpoint every N shots
-  
-# Logging
-logging:
-  level: "INFO"                     # DEBUG, INFO, WARNING, ERROR
-  save_prompts: true                # save all prompts for debugging
-  save_api_responses: false         # save raw API responses (uses disk space)
