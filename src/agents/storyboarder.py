@@ -20,7 +20,7 @@ def storyboarder(state: PipelineState) -> PipelineState:
         models = config.get("models", {})
         agent_cfg = ConfigLoader.get_agent_config(config, "storyboarder")
 
-        llm_model_name = agent_cfg.get("llm_model")
+        llm_model_name = agent_cfg.get("model")
         image_model_name = agent_cfg.get("image_model")
 
         if not llm_model_name or not image_model_name:
