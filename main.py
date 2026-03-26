@@ -129,11 +129,106 @@ def run_lore_master(args):
 
 
 def run_screenwriter(args):
-    print(f"Screenwriter: {args.name} - Not yet implemented")
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.screenwriter import screenwriter
+    from src.core.state import PipelineState
+
+    lore_dir = pm.current_project / "assets" / "lore"
+    if not (lore_dir / "toc.json").exists():
+        print(
+            "Error: Lore master must run first. Run: python main.py lore " + args.name
+        )
+        sys.exit(1)
+
+    print("Running screenwriter...")
+
+    novel_text = (pm.current_project / "src" / "novel.txt").read_text(encoding="utf-8")
+
+    initial_state = PipelineState(
+        novel_text=novel_text,
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=[],
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = screenwriter(initial_state)
+
+    if result.get("last_error"):
+        print(f"\nError: {result['last_error']}")
+        sys.exit(1)
+
+    print(f"\nScreenwriter complete!")
+    print(f"  Scenes extracted: {len(result['scenes'])}")
+
+    if result["scenes"]:
+        print("  Sample scenes:")
+        for scene in result["scenes"][:3]:
+            print(f"    - {scene.id}: {scene.location} ({scene.time_of_day})")
 
 
 def run_director(args):
-    print(f"Director: {args.name} - Not yet implemented")
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.director import director
+    from src.core.state import PipelineState
+
+    print("Running director...")
+
+    from src.core.state import SceneIR
+
+    scenes = [
+        SceneIR(
+            id="scene_1",
+            location="Marseille Port",
+            time_of_day="Day",
+            characters=["Edmond Dantes", "Mercedes"],
+            description="Edmond arrives at the port, greeted by his father",
+        )
+    ]
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=scenes,
+        current_scene_index=0,
+        shot_list=[],
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = director(initial_state)
+
+    if result.get("last_error"):
+        print(f"\nError: {result['last_error']}")
+        sys.exit(1)
+
+    print(f"\nDirector complete!")
+    print(f"  Shots generated: {len(result['shot_list'])}")
+
+    if result["shot_list"]:
+        print("  Sample shots:")
+        for shot in result["shot_list"][:3]:
+            print(f"    - {shot.id}: {shot.camera_movement} ({shot.duration}s)")
 
 
 def run_storyboarder(args):
