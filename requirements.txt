@@ -9,3 +9,5 @@ redis
 pymongo
 ffmpeg-python
 python-dotenv
+pytest
+pytest-mock
