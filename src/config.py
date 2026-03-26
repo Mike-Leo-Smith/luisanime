@@ -71,12 +71,19 @@ class ConfigLoader:
         agents = config.get("agents", {})
         agent_cfg = agents.get(agent_name, {})
 
-        provider = agent_cfg.get("provider", "gemini")
-        provider_defaults = config.get("providers", {}).get(provider, {})
+        if not agent_cfg:
+            raise ValueError(
+                f"Agent '{agent_name}' not found in config. "
+                f"Available agents: {list(agents.keys())}"
+            )
 
-        merged = provider_defaults.copy()
-        merged.update(agent_cfg)
-        return merged
+        if "provider" not in agent_cfg:
+            raise ValueError(
+                f"Agent '{agent_name}' must specify a provider in config. "
+                f"Each agent MUST have its own provider configuration."
+            )
+
+        return agent_cfg
 
 
 def load_config(project_path: Optional[Path] = None) -> Dict[str, Any]:
