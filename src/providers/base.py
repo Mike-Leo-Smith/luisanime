@@ -15,6 +15,7 @@ class ImageGenerationConfig(GenerationConfig):
     width: int = 1024
     height: int = 1024
     num_images: int = 1
+    reference_image: Optional[str] = None
 
 
 @dataclass

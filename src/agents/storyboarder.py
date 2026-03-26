@@ -83,9 +83,17 @@ Optimize this into a dense, high-quality image generation prompt."""
         state["shot_list"][idx].keyframe_begin_url = str(filepath_begin)
         print(f"  Saved begin keyframe: {filepath_begin}")
 
-        end_frame_prompt = f"{optimized_prompt}, end of motion, final pose"
-        print("  Generating end keyframe...")
-        response_end = image_gen.generate_image(end_frame_prompt, gen_config)
+        end_frame_prompt = (
+            f"{optimized_prompt}, end of motion, final pose, same character and scene"
+        )
+        print("  Generating end keyframe using I2I...")
+        gen_config_end = ImageGenerationConfig(
+            width=width,
+            height=height,
+            num_images=1,
+            reference_image=str(filepath_begin),
+        )
+        response_end = image_gen.generate_image(end_frame_prompt, gen_config_end)
         filepath_end = shot_dir / "keyframe_end.png"
         filepath_end.write_bytes(response_end.image_bytes)
         state["shot_list"][idx].keyframe_end_url = str(filepath_end)

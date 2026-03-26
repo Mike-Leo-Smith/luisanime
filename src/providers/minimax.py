@@ -135,6 +135,19 @@ Respond with valid JSON only."""
             "n": config.num_images,
         }
 
+        if config.reference_image:
+            import base64
+
+            with open(config.reference_image, "rb") as f:
+                image_data = base64.b64encode(f.read()).decode("utf-8")
+
+            payload["subject_reference"] = [
+                {
+                    "type": "character",
+                    "image_file": f"data:image/png;base64,{image_data}",
+                }
+            ]
+
         response = requests.post(url, headers=self.headers, json=payload)
         response.raise_for_status()
 
