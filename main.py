@@ -68,22 +68,23 @@ def run_indexer(args):
     if not pm.current_project or not pm.project_config:
         raise RuntimeError(f"Failed to load project '{args.name}'")
 
-    from src.agents.indexer import text_segmenter
+    from src.agents.lore_master import lore_master
 
-    index_dir = pm.current_project / "memory"
+    lore_dir = pm.current_project / "assets" / "lore"
     force = getattr(args, "force", False)
-    if (index_dir / "toc.json").exists() and not force:
-        print(f"Indexer already ran. TOC exists at {index_dir / 'toc.json'}")
-        print("Use --force to re-index.")
+    if (lore_dir / "toc.json").exists() and not force:
+        print(f"Lore master already ran. TOC exists at {lore_dir / 'toc.json'}")
+        print("Use --force to re-run.")
         return
 
-    if force and (index_dir / "toc.json").exists():
-        print("Force re-indexing...")
+    if force and (lore_dir / "toc.json").exists():
+        print("Force re-running lore master...")
         import shutil
 
-        shutil.rmtree(index_dir, ignore_errors=True)
+        shutil.rmtree(lore_dir / "chapters", ignore_errors=True)
+        (lore_dir / "toc.json").unlink(missing_ok=True)
 
-    print("Running indexer...")
+    print("Running lore master...")
     novel_text = (pm.current_project / "src" / "novel.txt").read_text(encoding="utf-8")
 
     initial_state = PipelineState(
@@ -101,47 +102,18 @@ def run_indexer(args):
         style=pm.project_config["video"]["style"],
     )
 
-    result = text_segmenter(initial_state)
-    print(f"\nIndexer complete!")
-    print(f"  Project: {args.name}")
-    print(f"  TOC: {pm.current_project / 'memory' / 'toc.json'}")
+    result = lore_master(initial_state)
+    if result.get("last_error"):
+        print(f"\nError: {result['last_error']}")
+        sys.exit(1)
+
+    print(f"\nLore Master complete!")
+    print(f"  TOC: {lore_dir / 'toc.json'}")
+    print(f"  Entities: {lore_dir / 'entities.json'}")
 
 
 def run_lore_master(args):
-    pm = ProjectManager(args.projects_dir)
-    pm.load_project(args.name)
-    if not pm.current_project or not pm.project_config:
-        raise RuntimeError(f"Failed to load project '{args.name}'")
-
-    index_dir = pm.current_project / "index"
-    if not (index_dir / "toc.json").exists():
-        print("Error: Indexer must run first. Run: python main.py index " + args.name)
-        sys.exit(1)
-
-    from src.agents.lore_master import lore_master
-    from src.core.state import PipelineState
-
-    print("Running lore master...")
-
-    initial_state = PipelineState(
-        novel_text="",
-        current_chapter_id=args.name,
-        entity_graph={},
-        scenes=[],
-        current_scene_index=0,
-        shot_list=[],
-        current_shot_index=0,
-        retry_count=0,
-        last_error=None,
-        approved_clips=[],
-        project_dir=str(pm.current_project),
-        style=pm.project_config["video"]["style"],
-    )
-
-    result = lore_master(initial_state)
-
-    print(f"\nLore Master complete!")
-    print(f"  Entities extracted: {len(result['entity_graph'])}")
+    return run_indexer(args)
 
     if result["entity_graph"]:
         print("  Sample entities:")

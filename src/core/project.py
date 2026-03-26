@@ -86,7 +86,6 @@ class ProjectManager:
             "assets/locations",
             "assets/audio",
             "assets/lore",
-            "index/chapters",
             "scenes",
             "cache",
             "checkpoints",
@@ -110,25 +109,6 @@ class ProjectManager:
             json.dumps({}, indent=2), encoding="utf-8"
         )
 
-        (project_dir / "index" / "project.json").write_text(
-            json.dumps(
-                {
-                    "project_id": name,
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
-                    "version": "1.0.0",
-                    "stats": {
-                        "chapters": 0,
-                        "scenes": 0,
-                        "shots": 0,
-                        "approved_shots": 0,
-                    },
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
         readme = f"""# {name}
 
 AFP Video Project
@@ -137,7 +117,6 @@ AFP Video Project
 
 - `src/` - Source materials (novel.txt, scripts)
 - `assets/` - Generated assets (characters, locations, lore, audio)
-- `index/` - Chapter index and metadata
 - `scenes/` - Scene-based shot organization
 - `cache/` - Cache files
 - `checkpoints/` - Pipeline checkpoints
@@ -147,14 +126,13 @@ AFP Video Project
 
 ## Pipeline Stages
 
-1. `index` - Segment novel into chapters
-2. `lore` - Extract entities (characters, locations, items)
-3. `scenes` - Break into scenes
-4. `shots` - Generate shot list
-5. `storyboard` - Generate keyframes
-6. `animate` - Generate video clips
-7. `qa` - Quality assurance
-8. `composite` - Final assembly
+1. `lore` - Segment chapters and extract entities
+2. `scenes` - Break into scenes
+3. `shots` - Generate shot list
+4. `storyboard` - Generate keyframes
+5. `animate` - Generate video clips
+6. `qa` - Quality assurance
+7. `composite` - Final assembly
 
 ## Usage
 

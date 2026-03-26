@@ -62,10 +62,6 @@ models:
 # Per-agent configurations
 # Each agent references a model and can override parameters
 agents:
-  indexer:
-    model: gemini-flash
-    temperature: 0.1  # Lower for consistent metadata
-
   lore_master:
     model: gemini-flash
 
