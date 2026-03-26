@@ -364,5 +364,35 @@ def main():
     args.func(args)
 
 
+def run_pipeline(text: str, style: str = "anime", project_dir: str = "./workspace"):
+    from src.core.graph import app as pipeline_app
+    import uuid
+
+    initial_state = PipelineState(
+        novel_text=text,
+        current_chapter_id=str(uuid.uuid4()),
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=[],
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=[],
+        project_dir=project_dir,
+        style=style,
+    )
+
+    print("Starting Agentic Filming Pipeline...")
+    final_state = pipeline_app.invoke(initial_state)
+
+    print("\nPipeline Completed!")
+    print(f"Total Scenes: {len(final_state['scenes'])}")
+    print(f"Total Shots: {len(final_state['shot_list'])}")
+    print(f"Entities Found: {list(final_state['entity_graph'].keys())}")
+
+    return final_state
+
+
 if __name__ == "__main__":
     main()
