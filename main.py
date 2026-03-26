@@ -443,6 +443,61 @@ def run_qa_linter(args):
     print(f"  Rejected: {len(animated_shots) - approved_count}")
 
 
+def run_compositor(args):
+    pm = ProjectManager(args.projects_dir)
+    pm.load_project(args.name)
+    if not pm.current_project or not pm.project_config:
+        raise RuntimeError(f"Failed to load project '{args.name}'")
+
+    from src.agents.compositor import compositor
+    from src.core.state import PipelineState, Shot
+
+    shots_file = pm.current_project / "scenes" / "shots" / "shots.json"
+    if not shots_file.exists():
+        print("Error: No shots found. Run: python main.py animate " + args.name)
+        sys.exit(1)
+
+    import json
+
+    shots_data = json.loads(shots_file.read_text(encoding="utf-8"))
+    shots = [Shot(**s) for s in shots_data]
+
+    approved_clips = [
+        s.video_url for s in shots if s.status == "approved" and s.video_url
+    ]
+
+    if not approved_clips:
+        print("Error: No approved clips found. Run: python main.py qa " + args.name)
+        sys.exit(1)
+
+    print(f"Compositing {len(approved_clips)} approved clips...")
+
+    initial_state = PipelineState(
+        novel_text="",
+        current_chapter_id=args.name,
+        entity_graph={},
+        scenes=[],
+        current_scene_index=0,
+        shot_list=shots,
+        current_shot_index=0,
+        retry_count=0,
+        last_error=None,
+        approved_clips=approved_clips,
+        project_dir=str(pm.current_project),
+        style=pm.project_config["video"]["style"],
+    )
+
+    result = compositor(initial_state)
+
+    if result.get("last_error"):
+        print(f"\nError: {result['last_error']}")
+        sys.exit(1)
+
+    print(f"\nCompositor complete!")
+    if result.get("final_video_path"):
+        print(f"  Final video: {result['final_video_path']}")
+
+
 def _old_run_indexer(args):
 
     from src.agents.indexer import text_segmenter
