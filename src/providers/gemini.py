@@ -15,9 +15,12 @@ from .base import (
 
 
 class GeminiProvider(BaseLLMProvider, BaseImageProvider):
-    def __init__(self, api_key: str, model: str = "gemini-3.1-pro"):
+    def __init__(
+        self, api_key: str, model: str = "gemini-3.1-pro", image_model: str = None
+    ):
         self.api_key = api_key
         self.model = model
+        self.image_model = image_model or "imagen-4.0-generate-001"
         self.client = genai.Client(
             api_key=api_key, http_options={"api_version": "v1alpha"}
         )
@@ -120,7 +123,7 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         config = config or ImageGenerationConfig()
 
         response = self.client.models.generate_images(
-            model="imagen-4.0-generate-001",
+            model=self.image_model,
             prompt=prompt,
             config=types.GenerateImagesConfig(
                 number_of_images=config.num_images,
@@ -135,7 +138,7 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             image_bytes=img.image_bytes,
             mime_type="image/png",
             usage={"prompt_tokens": 0, "completion_tokens": 0},
-            model="imagen-4.0-generate-001",
+            model=self.image_model,
         )
 
     def edit_image(

@@ -14,9 +14,17 @@ from .base import (
 
 
 class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
-    def __init__(self, api_key: str, base_url: str = "https://api.minimaxi.com/v1"):
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str = "https://api.minimaxi.com/v1",
+        image_model: str = "image-01",
+        video_model: str = "MiniMax-Hailuo-02",
+    ):
         self.api_key = api_key
         self.base_url = base_url
+        self.image_model = image_model
+        self.video_model = video_model
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -29,7 +37,7 @@ class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
 
         url = f"{self.base_url}/image_generation"
         payload = {
-            "model": "image-01",
+            "model": self.image_model,
             "prompt": prompt,
             "width": config.width,
             "height": config.height,
@@ -51,7 +59,7 @@ class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
             image_bytes=img_response.content,
             mime_type="image/png",
             usage={"prompt_tokens": 0, "completion_tokens": 0},
-            model="minimax-image-01",
+            model=self.image_model,
         )
 
     def _poll_image_task(self, task_id: str, timeout: int = 300) -> str:
@@ -90,7 +98,7 @@ class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
 
         url = f"{self.base_url}/video_generation"
         payload = {
-            "model": "MiniMax-Hailuo-02",
+            "model": self.video_model,
             "prompt": prompt,
             "duration": config.duration,
         }
@@ -118,7 +126,7 @@ class MiniMaxProvider(BaseImageProvider, BaseVideoProvider):
             duration=config.duration,
             resolution=config.resolution,
             usage={"prompt_tokens": 0, "completion_tokens": 0},
-            model="minimax-hailuo-02",
+            model=self.video_model,
         )
 
     def _poll_video_task(self, task_id: str, timeout: int = 600) -> str:

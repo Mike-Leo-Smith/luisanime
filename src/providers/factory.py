@@ -30,7 +30,9 @@ class ProviderFactory:
 
         if provider_type == "gemini":
             return GeminiProvider(
-                api_key=api_key, model=config.get("model", "gemini-3.1-pro")
+                api_key=api_key,
+                model=config.get("model", "gemini-3.1-pro"),
+                image_model=config.get("image_model"),
             )
         elif provider_type == "openai":
             return OpenAICompatibleProvider(
@@ -47,9 +49,17 @@ class ProviderFactory:
         api_key = cls._resolve_api_key(config.get("api_key"))
 
         if provider_type == "gemini":
-            return GeminiProvider(api_key=api_key)
+            return GeminiProvider(
+                api_key=api_key,
+                model=config.get("model", "gemini-3.1-pro"),
+                image_model=config.get("image_model", config.get("model")),
+            )
         elif provider_type == "minimax":
-            return MiniMaxProvider(api_key=api_key)
+            return MiniMaxProvider(
+                api_key=api_key,
+                base_url=config.get("base_url", "https://api.minimaxi.com/v1"),
+                image_model=config.get("model", "image-01"),
+            )
         else:
             raise ValueError(f"Unknown image provider: {provider_type}")
 
@@ -59,7 +69,11 @@ class ProviderFactory:
         api_key = cls._resolve_api_key(config.get("api_key"))
 
         if provider_type == "minimax":
-            return MiniMaxProvider(api_key=api_key)
+            return MiniMaxProvider(
+                api_key=api_key,
+                base_url=config.get("base_url", "https://api.minimaxi.com/v1"),
+                video_model=config.get("model", "MiniMax-Hailuo-02"),
+            )
         else:
             raise ValueError(f"Unknown video provider: {provider_type}")
 
