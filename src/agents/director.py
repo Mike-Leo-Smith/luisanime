@@ -1,7 +1,6 @@
 from src.core.state import PipelineState, Shot
 from src.schemas import SHOT_SCHEMA
-from src.agents.utils import get_llm_provider
-from src.agents.chapter_utils import get_chapter_db
+from src.agents.utils import get_llm_provider, get_chapter_db
 
 
 def director(state: PipelineState) -> PipelineState:

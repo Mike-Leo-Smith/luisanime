@@ -1,7 +1,6 @@
 from src.core.state import PipelineState, EntityState
 from src.schemas import ENTITY_SCHEMA
-from src.agents.utils import get_llm_provider
-from src.agents.chapter_utils import get_chapter_db
+from src.agents.utils import get_llm_provider, get_chapter_db
 
 
 def lore_master(state: PipelineState) -> PipelineState:

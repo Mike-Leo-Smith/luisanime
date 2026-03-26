@@ -1,0 +1,58 @@
+{
+  "Sarah": {
+    "type": "character",
+    "description": "A young governess recently hired to care for the two orphaned children in the mansion."
+  },
+  "Mr. Blackwood": {
+    "type": "character",
+    "description": "The mysterious, tall owner of the mansion with piercing blue eyes."
+  },
+  "Dr. Chen": {
+    "type": "character",
+    "description": "An elderly physician who has served as the family doctor for decades."
+  },
+  "The mansion on the hill": {
+    "type": "location",
+    "description": "An isolated, old house where the characters have gathered."
+  },
+  "Emily": {
+    "type": "character",
+    "description": "One of the children who claims there is a ghost in the attic."
+  },
+  "James": {
+    "type": "character",
+    "description": "One of the children who claims there is a ghost in the attic."
+  },
+  "The estate garden": {
+    "type": "location",
+    "description": "An overgrown area on the property where Sarah begins her exploration."
+  },
+  "The greenhouse": {
+    "type": "location",
+    "description": "An old building at the far end of the property where the locket was found."
+  },
+  "The house": {
+    "type": "location",
+    "description": "The main residence where the nursery and attic are located."
+  },
+  "The attic": {
+    "type": "location",
+    "description": "A room in the house rumored by the children to be haunted."
+  },
+  "Golden locket": {
+    "type": "item",
+    "description": "A small piece of jewelry with a strange engraved symbol discovered in the greenhouse."
+  },
+  "Eliza": {
+    "type": "character",
+    "description": "Mr. Blackwood's sister who disappeared ten years ago."
+  },
+  "The locket": {
+    "type": "item",
+    "description": "A mysterious piece of jewelry Sarah found in the greenhouse that belonged to Eliza."
+  },
+  "The woods": {
+    "type": "location",
+    "description": "An area near the house where mysterious lights have been spotted at night."
+  }
+}
