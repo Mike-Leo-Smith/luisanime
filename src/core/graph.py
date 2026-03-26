@@ -39,7 +39,7 @@ def route_qa(state: PipelineState) -> str:
     shot = state["shot_list"][idx]
 
     config = load_config()
-    max_retries = config.render_plane.animator.pipeline_settings.max_retries_per_shot
+    max_retries = config.get("generation", {}).get("max_retries_per_shot", 3)
 
     if shot.status == "approved":
         if idx < len(state["shot_list"]) - 1:

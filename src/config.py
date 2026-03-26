@@ -1,103 +1,89 @@
 import os
-from dotenv import load_dotenv
-from enum import Enum
+from pathlib import Path
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator
 import yaml
+from dotenv import load_dotenv
 
-load_dotenv()  # Load from .env
-
-
-class Provider(str, Enum):
-    GOOGLE = "google"
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    HAILUO = "hailuo"
-    LUMA = "luma"
-    RUNWAY = "runway"
+load_dotenv()
 
 
-class ModelConfig(BaseModel):
-    provider: Provider
-    model: str
-    api_key: str
-    temperature: float = 0.7
+class ConfigLoader:
+    ROOT_CONFIG = Path("config.yaml")
 
-    @field_validator("api_key", mode="before")
-    def resolve_env_vars(cls, v):
-        if isinstance(v, str) and v.startswith("ENV:"):
-            env_var = v[4:]
-            val = os.getenv(env_var)
-            if not val:
-                # In a real production system, you might want to raise an error
-                # but for now we'll just return the ENV name for debugging
-                return f"MISSING_ENV_{env_var}"
-            return val
-        return v
+    @classmethod
+    def load(cls, project_path: Optional[Path] = None) -> Dict[str, Any]:
+        config_paths = []
+
+        env_config = os.getenv("CONFIG_PATH")
+        if env_config:
+            config_paths.append(Path(env_config))
+
+        if project_path:
+            project_config = project_path / "config.yaml"
+            if project_config.exists():
+                config_paths.append(project_config)
+
+        if cls.ROOT_CONFIG.exists():
+            config_paths.append(cls.ROOT_CONFIG)
+
+        if not config_paths:
+            raise FileNotFoundError("No config.yaml found")
+
+        merged = {}
+        for path in reversed(config_paths):
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                if data:
+                    merged = cls._deep_merge(merged, data)
+
+        merged = cls._resolve_env_vars(merged)
+        return merged
+
+    @classmethod
+    def _deep_merge(cls, base: Dict, override: Dict) -> Dict:
+        result = base.copy()
+        for key, value in override.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                result[key] = cls._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @classmethod
+    def _resolve_env_vars(cls, obj: Any) -> Any:
+        if isinstance(obj, str) and obj.startswith("ENV:"):
+            env_var = obj[4:]
+            return os.getenv(env_var) or f"MISSING_ENV_{env_var}"
+        elif isinstance(obj, dict):
+            return {k: cls._resolve_env_vars(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [cls._resolve_env_vars(item) for item in obj]
+        return obj
+
+    @classmethod
+    def get_agent_config(
+        cls, config: Dict[str, Any], agent_name: str
+    ) -> Dict[str, Any]:
+        agents = config.get("agents", {})
+        agent_cfg = agents.get(agent_name, {})
+
+        provider = agent_cfg.get("provider", "gemini")
+        provider_defaults = config.get("providers", {}).get(provider, {})
+
+        merged = provider_defaults.copy()
+        merged.update(agent_cfg)
+        return merged
 
 
-class ProjectConfig(BaseModel):
-    name: str
-    workspace_dir: str
-    log_level: str = "INFO"
-
-
-class MemoryDBConfig(BaseModel):
-    type: str
-    url: str
-
-
-class ControlPlaneConfig(BaseModel):
-    memory_db: MemoryDBConfig
-    agents: Dict[str, ModelConfig]
-
-
-class PipelineSettings(BaseModel):
-    max_retries_per_shot: int = 3
-    candidates_per_take: int = 3
-
-
-class AnimatorConfig(BaseModel):
-    provider: str
-    model: str
-    api_key: str
-    pipeline_settings: PipelineSettings
-
-    @field_validator("api_key", mode="before")
-    def resolve_env_vars(cls, v):
-        if isinstance(v, str) and v.startswith("ENV:"):
-            env_var = v[4:]
-            val = os.getenv(env_var)
-            if not val:
-                return f"MISSING_ENV_{env_var}"
-            return val
-        return v
-
-
-class RenderPlaneConfig(BaseModel):
-    storyboarder: ModelConfig
-    animator: AnimatorConfig
-
-
-class PostProcessingConfig(BaseModel):
-    lip_sync: Dict[str, str]
-
-
-class GlobalConfig(BaseModel):
-    project: ProjectConfig
-    control_plane: ControlPlaneConfig
-    render_plane: RenderPlaneConfig
-    post_processing: PostProcessingConfig
-
-
-def load_config(path: str = "config.yaml") -> GlobalConfig:
-    with open(path, "r") as f:
-        config_data = yaml.safe_load(f)
-    return GlobalConfig(**config_data)
+def load_config(project_path: Optional[Path] = None) -> Dict[str, Any]:
+    return ConfigLoader.load(project_path)
 
 
 if __name__ == "__main__":
-    # Test loading
-    config = load_config()
-    print(f"Project Name: {config.project.name}")
-    print(f"Director Model: {config.control_plane.agents['director_node'].model}")
+    cfg = load_config()
+    print(f"Project: {cfg['project']['name']}")
+    print(f"Director: {cfg['agents']['director']}")
