@@ -100,6 +100,8 @@ def run_indexer(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     result = lore_master(initial_state)
@@ -161,6 +163,8 @@ def run_screenwriter(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     result = screenwriter(initial_state)
@@ -313,6 +317,8 @@ def run_storyboarder(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     result = storyboarder(initial_state)
@@ -380,6 +386,8 @@ def run_animator(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     for i in range(len(pending_shots)):
@@ -428,6 +436,8 @@ def run_qa_linter(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     for i in range(len(animated_shots)):
@@ -486,6 +496,8 @@ def run_compositor(args):
         approved_clips=approved_clips,
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     result = compositor(initial_state)
@@ -524,6 +536,8 @@ def _old_run_indexer(args):
         approved_clips=[],
         project_dir=str(pm.current_project),
         style=pm.project_config["video"]["style"],
+    ,
+        config=pm.project_config,
     )
 
     result = text_segmenter(initial_state)
@@ -932,6 +946,8 @@ def run_pipeline(text: str, style: str = "anime", project_dir: str = "./workspac
         approved_clips=[],
         project_dir=project_dir,
         style=style,
+    ,
+        config=pm.project_config,
     )
 
     print("Starting Agentic Filming Pipeline...")
