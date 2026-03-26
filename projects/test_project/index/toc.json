@@ -1,7 +1,7 @@
 {
   "metadata": {
     "total_chapters": 3,
-    "total_chars": 2303,
+    "total_chars": 1616,
     "chapter_files": [
       "chapter_001.json",
       "chapter_002.json",
@@ -13,9 +13,9 @@
       "id": "chapter_001",
       "file": "chapter_001.json",
       "text_file": "chapter_001.txt",
-      "title": "The Beginning",
+      "title": "The Arrival",
       "number": 1,
-      "char_count": 790
+      "char_count": 723
     },
     {
       "id": "chapter_002",
@@ -23,7 +23,7 @@
       "text_file": "chapter_002.txt",
       "title": "The Discovery",
       "number": 2,
-      "char_count": 812
+      "char_count": 422
     },
     {
       "id": "chapter_003",
@@ -31,7 +31,7 @@
       "text_file": "chapter_003.txt",
       "title": "The Secret",
       "number": 3,
-      "char_count": 676
+      "char_count": 445
     }
   ]
 }

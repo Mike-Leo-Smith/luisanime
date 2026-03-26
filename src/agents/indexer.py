@@ -319,7 +319,7 @@ def text_segmenter(state: PipelineState) -> PipelineState:
     print("--- INDEXER: Chapter-Based Segmentation ---")
 
     project_dir = state.get("project_dir", "./workspace")
-    db_path = Path(project_dir) / "memory" / "chapters.json"
+    db_path = Path(project_dir) / "index" / "chapters.json"
 
     if db_path.parent.exists() and (db_path.parent / "toc.json").exists():
         print(f"  Chapter database already exists at {db_path.parent}")

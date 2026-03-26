@@ -1,100 +1,137 @@
 # Project Progress: Agentic Filming Pipeline (AFP)
 
-## ✅ Phase 1: Core Infrastructure - COMPLETED
+## Phase 1: Core Infrastructure - COMPLETED
 
 ### Configuration System
 - [x] Created `src/config.py` with ConfigLoader supporting hierarchical config loading
 - [x] Implemented per-agent configuration (each agent has its own provider, model, API key)
 - [x] Environment variable resolution for API keys (ENV:VAR_NAME pattern)
 - [x] Support for project-specific config.yaml files
-- [x] Clean config.yaml without duplicate sections or provider fallbacks
+- [x] Clean config.yaml with model definitions and agent references
 
 ### Provider Abstraction Layer
 - [x] Created `src/providers/base.py` with base classes for LLM, Image, and Video providers
 - [x] Implemented `src/providers/gemini.py` - Gemini LLM and image generation
-- [x] Implemented `src/providers/minimax.py` - MiniMax image and video generation
+- [x] Implemented `src/providers/minimax.py` - MiniMax LLM, image and video generation
 - [x] Implemented `src/providers/openai_compat.py` - OpenAI-compatible LLM provider
 - [x] Created `src/providers/factory.py` for dynamic provider instantiation
+- [x] Added `generate_structured()` method for JSON schema enforcement
 - [x] All providers respect config.yaml model settings
 
 ### Project Management
-- [x] Created `src/core/project_manager.py` with shot-based asset organization
-- [x] Project structure: `shots/{shot_id}/` for per-shot assets
-- [x] Shared assets directory for characters, locations, audio
+- [x] Created `src/core/project.py` with shot-based asset organization
+- [x] Project structure: `src/`, `assets/`, `index/`, `scenes/`, `cache/`, `checkpoints/`, `output/`, `logs/`
+- [x] Shared assets directory for characters, locations, audio, lore
 - [x] Checkpoint system for resumable pipeline execution
+- [x] Scene-based shot organization: `scenes/{scene_id}/shots/{shot_id}/`
 
 ### Main Entry Point
-- [x] Updated `main.py` with CLI structure (init, run commands)
-- [x] Backwards-compatible run_pipeline() function
-- [x] Support for --resume-from checkpoint
+- [x] Updated `main.py` with CLI structure (create, index, lore, scenes, shots, storyboard, animate, qa, post-prod, status)
+- [x] Support for running individual pipeline stages
 - [x] Project loading guards in place
 
-## ✅ Phase 2: Agent Configuration Updates - COMPLETED
+## Phase 2: Agent Refactoring - COMPLETED
 
-### Agent Files Updated to Use New Config Format
-- [x] `src/agents/pre_production.py` - lore_master, screenwriter, director
-- [x] `src/agents/asset_locking.py` - storyboarder
-- [x] `src/agents/production.py` - animator, qa_linter
-- [x] `src/agents/post_production.py` - compositor (import added)
+### Individual Agent Files
+- [x] `src/agents/indexer.py` - Chapter segmentation with metadata extraction
+- [x] `src/agents/lore_master.py` - Entity extraction (characters, locations, items)
+- [x] `src/agents/screenwriter.py` - Scene chunking from chapters
+- [x] `src/agents/director.py` - Shot list generation from scenes
+- [x] `src/agents/storyboarder.py` - Keyframe generation
+- [x] `src/agents/animator.py` - Video generation
+- [x] `src/agents/qa_linter.py` - Quality assurance with VLM
+- [x] `src/agents/compositor.py` - Final assembly (lip-sync, stitching)
+- [x] `src/agents/utils.py` - Shared utilities for agent configuration
 
-All agents now use:
-```python
-from src.config import ConfigLoader
-model_cfg = ConfigLoader.get_agent_config(config, "agent_name")
-# Access via dict: model_cfg["model"], model_cfg["api_key"], etc.
-```
+### JSON Schema Support
+- [x] Created `src/schemas.py` with structured output schemas:
+  - `CHAPTER_METADATA_SCHEMA` - Chapter title, summary, characters, events
+  - `ENTITY_SCHEMA` - Entity extraction with type and description
+  - `SCENE_SCHEMA` - Scene metadata (id, location, time, characters)
+  - `SHOT_SCHEMA` - Shot metadata (id, prompt, camera, duration)
+- [x] All LLM agents use `generate_structured()` for type-safe outputs
 
-## ✅ Phase 3: Documentation - COMPLETED
+### Deleted Old Files
+- [x] Removed `src/agents/pre_production.py` (split into individual files)
+- [x] Removed `src/agents/production.py` (split into individual files)
+- [x] Removed `src/agents/asset_locking.py` (renamed to storyboarder.py)
+- [x] Removed `src/agents/post_production.py` (renamed to compositor.py)
+- [x] Removed `src/agents/chapter_utils.py` (merged into utils.py)
+
+## Phase 3: Documentation - COMPLETED
 
 ### Updated Documentation
-- [x] `DESIGN.md` - Comprehensive architecture document with:
-  - Provider abstraction layer details
-  - Per-agent configuration system
-  - Shot-based asset organization
-  - Checkpointing and resumability
-  - Model names updated (gemini-3.1-flash-preview for high-token agents, gemini-3.1-pro-preview for reasoning agents)
-- [x] `README.md` - Updated setup instructions (see below)
+- [x] `README.md` - Updated with new project structure and CLI commands
+- [x] `DESIGN.md` - Updated architecture document with:
+  - New project structure (src/, assets/, index/, scenes/)
+  - Individual agent files organization
+  - JSON schema enforcement
+  - Updated provider abstraction details
+- [x] `PROGRESS.md` - This file, tracking current status
 
-## 🔄 Phase 4: Testing - IN PROGRESS
+## Phase 4: Testing - IN PROGRESS
 
 ### Test Status
-- [ ] Run full test suite
-- [ ] Verify agent config loading works correctly
-- [ ] Verify provider factory creates correct providers
-- [ ] Verify backwards compatibility maintained
+- [ ] Test indexer agent with short novel
+- [ ] Test lore_master agent
+- [ ] Test screenwriter agent
+- [ ] Test director agent
+- [ ] Test storyboarder agent
+- [ ] Test animator agent
+- [ ] Test qa_linter agent
+- [ ] Test compositor agent
 
-### Known Test Issues (Pre-existing)
+### Known Issues
 - Test files have type errors due to PipelineState changes (missing project_dir, style fields)
 - These are in test files, not production code
 
-## 📋 Remaining Work
-
-### Immediate Tasks
-1. Run test suite and fix any issues
-2. Update .env template with agent-specific API keys
-3. Create example project template
-
-### Future Enhancements
-- Add more provider implementations (Anthropic, etc.)
-- Implement actual checkpoint save/load in graph.py
-- Add progress reporting UI
-- Optimize asset caching
-
-## 🎯 Current Model Configuration
+## Current Model Configuration
 
 | Agent | Provider | Model | Notes |
 |-------|----------|-------|-------|
-| lore_master | gemini | gemini-3.1-flash-preview | High token usage, uses Flash for cost efficiency |
-| screenwriter | gemini | gemini-3.1-flash-preview | High token usage, uses Flash for cost efficiency |
-| director | gemini | gemini-3.1-pro-preview | Requires high reasoning capability |
-| storyboarder | minimax | image-01 | Image generation |
+| indexer | gemini | gemini-3.1-flash-lite-preview | Chapter segmentation |
+| lore_master | gemini | gemini-3.1-flash-lite-preview | Entity extraction |
+| screenwriter | gemini | gemini-3.1-flash-lite-preview | Scene chunking |
+| director | gemini | gemini-3.1-pro-preview | Shot list generation |
+| storyboarder | minimax | image-01 | Keyframe generation |
 | animator | minimax | MiniMax-Hailuo-02 | Video generation |
-| qa_linter | gemini | gemini-3.1-pro-preview | Requires high reasoning for quality checks |
+| qa_linter | gemini | gemini-3.1-pro-preview | Quality checks |
 
-## 📁 Key Files
+## Project Structure
+
+```
+project/
+├── src/                   # Source materials
+│   └── novel.txt
+├── assets/                # Generated assets
+│   ├── characters/        # Character profiles
+│   ├── locations/         # Location profiles
+│   ├── audio/             # Audio assets
+│   └── lore/              # Entity database
+├── index/                 # Chapter index
+│   ├── project.json       # Project metadata
+│   ├── toc.json           # Table of contents
+│   └── chapters/          # Individual chapters
+├── scenes/                # Scene organization
+│   └── {scene_id}/
+│       ├── metadata.json
+│       └── shots/
+│           └── {shot_id}/
+│               ├── metadata.json
+│               ├── keyframe.png
+│               └── video.mp4
+├── cache/                 # Cache files
+├── checkpoints/           # Pipeline checkpoints
+├── output/                # Final deliverables
+├── logs/                  # Pipeline logs
+└── config.yaml
+```
+
+## Key Files
 
 **Configuration:**
 - `config.yaml` - Main configuration file
+- `config.yaml.template` - Template with defaults
 - `src/config.py` - ConfigLoader implementation
 
 **Providers:**
@@ -105,15 +142,21 @@ model_cfg = ConfigLoader.get_agent_config(config, "agent_name")
 - `src/providers/factory.py` - ProviderFactory
 
 **Core:**
-- `src/core/project_manager.py` - Project management
+- `src/core/project.py` - Project management (renamed from project_manager.py)
 - `src/core/graph.py` - LangGraph workflow
 - `src/core/state.py` - Pipeline state definitions
 
 **Agents:**
-- `src/agents/pre_production.py` - Lore Master, Screenwriter, Director
-- `src/agents/asset_locking.py` - Storyboarder
-- `src/agents/production.py` - Animator, QA Linter
-- `src/agents/post_production.py` - Compositor, Lip Sync
+- `src/agents/indexer.py` - Text segmentation
+- `src/agents/lore_master.py` - Entity extraction
+- `src/agents/screenwriter.py` - Scene chunking
+- `src/agents/director.py` - Shot list generation
+- `src/agents/storyboarder.py` - Keyframe generation
+- `src/agents/animator.py` - Video generation
+- `src/agents/qa_linter.py` - Quality assurance
+- `src/agents/compositor.py` - Final assembly
+- `src/agents/utils.py` - Shared agent utilities
+- `src/schemas.py` - JSON schemas for structured outputs
 
 **Entry Point:**
 - `main.py` - CLI and pipeline runner

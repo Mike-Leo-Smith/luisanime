@@ -1,0 +1,37 @@
+{
+  "id": "chapter_001",
+  "text_preview": "Chapter 1: The Arrival\n\nIt was a dark and stormy night. Sarah, a young governess, arrived at the old mansion on the hill to care for two orphaned children, Emily and James. The mansion was isolated, surrounded by overgrown gardens and tall gates.\n\nMr. Blackwood, the mysterious owner, greeted her at the door. He was a tall man with piercing blue eyes that seemed to look through her. \"Welcome to Blackwood Manor,\" he said. \"The children have been expecting you.\"\n\nDr. Chen, the elderly family physic...",
+  "full_text_length": 723,
+  "start_pos": 19,
+  "end_pos": 744,
+  "embedding": [],
+  "metadata": {
+    "chapter_number": 1,
+    "chapter_title": "The Arrival",
+    "summary": "Sarah, a new governess, arrives at the isolated Blackwood Manor to care for two orphaned children. Upon her arrival, she is met with a warning from the family physician and a unsettling claim from one of the children about a ghost in the attic.",
+    "characters": [
+      "Sarah",
+      "Emily",
+      "James",
+      "Mr. Blackwood",
+      "Dr. Chen"
+    ],
+    "locations": [
+      "Blackwood Manor",
+      "the mansion on the hill",
+      "the attic"
+    ],
+    "plot_events": [
+      "Sarah's arrival at the mansion",
+      "Meeting Mr. Blackwood",
+      "Receiving a warning from Dr. Chen",
+      "Emily's revelation about the ghost"
+    ],
+    "emotional_tone": "Tense and mysterious",
+    "key_scenes": [
+      "Mr. Blackwood greets Sarah at the front door of the manor.",
+      "Dr. Chen pulls Sarah aside to warn her about the strange occurrences at night.",
+      "Emily tells Sarah about the ghost that haunts the attic."
+    ]
+  }
+}

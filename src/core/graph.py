@@ -2,10 +2,13 @@ from langgraph.graph import StateGraph, END
 from src.core.state import PipelineState
 from src.config import load_config
 from src.agents.indexer import text_segmenter
-from src.agents.pre_production import lore_master, screenwriter, director
-from src.agents.asset_locking import storyboarder
-from src.agents.production import animator, qa_linter
-from src.agents.post_production import lip_sync_agent, compositor
+from src.agents.lore_master import lore_master
+from src.agents.screenwriter import screenwriter
+from src.agents.director import director
+from src.agents.storyboarder import storyboarder
+from src.agents.animator import animator
+from src.agents.qa_linter import qa_linter
+from src.agents.compositor import lip_sync_agent, compositor
 
 
 workflow = StateGraph(PipelineState)

@@ -84,9 +84,7 @@ def run_indexer(args):
         shutil.rmtree(memory_dir, ignore_errors=True)
 
     print("Running indexer...")
-    novel_text = (pm.current_project / "input" / "novel.txt").read_text(
-        encoding="utf-8"
-    )
+    novel_text = (pm.current_project / "src" / "novel.txt").read_text(encoding="utf-8")
 
     initial_state = PipelineState(
         novel_text=novel_text,
@@ -188,9 +186,7 @@ def _old_run_indexer(args):
         return
 
     print("Running indexer...")
-    novel_text = (pm.current_project / "input" / "novel.txt").read_text(
-        encoding="utf-8"
-    )
+    novel_text = (pm.current_project / "src" / "novel.txt").read_text(encoding="utf-8")
 
     initial_state = PipelineState(
         novel_text=novel_text,
@@ -227,7 +223,7 @@ def run_pre_production(args):
         print("Indexer not run yet. Running indexer first...")
         from src.agents.indexer import text_segmenter
 
-        novel_text = (pm.current_project / "input" / "novel.txt").read_text(
+        novel_text = (pm.current_project / "src" / "novel.txt").read_text(
             encoding="utf-8"
         )
 
@@ -270,7 +266,7 @@ def run_pre_production(args):
             # Use first chapter's text for now
             novel_text = chapters[0].text
         else:
-            novel_text = (pm.current_project / "input" / "novel.txt").read_text(
+            novel_text = (pm.current_project / "src" / "novel.txt").read_text(
                 encoding="utf-8"
             )
 
@@ -402,11 +398,11 @@ def run_production(args):
         max_retries = pm.project_config["generation"]["max_retries_per_shot"]
         approved = False
 
+        from src.agents.animator import animator
+        from src.agents.qa_linter import qa_linter
+
         for attempt in range(max_retries):
             print(f"  Attempt {attempt + 1}/{max_retries}...")
-
-            from src.agents.animator import animator
-from src.agents.qa_linter import qa_linter
 
             state = animator(state)
             video_url = state["shot_list"][i].video_url

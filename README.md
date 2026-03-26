@@ -4,7 +4,7 @@ The **Agentic Filming Pipeline (AFP)** is a state-of-the-art, automated system d
 
 By modeling the process after modern compiler infrastructures and physically-based rendering pipelines, AFP abstracts the unpredictable nature of generative AI behind strict state machines, Intermediate Representations (IR), and automated visual linters.
 
-## 🚀 Key Features
+## Key Features
 - **Per-Agent Configuration:** Each AI agent has independent provider, model, and API key settings
 - **Multi-Provider Support:** Unified interface for Gemini, MiniMax, and OpenAI-compatible APIs
 - **Shot-Based Asset Organization:** Clean project structure with per-shot assets and shared resources
@@ -14,7 +14,7 @@ By modeling the process after modern compiler infrastructures and physically-bas
 - **Hierarchical Memory:** Manages context over 100k+ words using a multi-level cache (Global Symbol Table, Scene Graph, and Working Register)
 - **Local Post-Processing:** Deterministic lip-syncing and compositing are handled locally for precision and cost-efficiency
 
-## 🛠 Tech Stack
+## Tech Stack
 - **Orchestration:** LangGraph (Python)
 - **Logic/Reasoning:** Gemini 1.5 Pro / GPT-4 / Claude
 - **Vision QA:** Gemini 1.5 Pro
@@ -22,11 +22,11 @@ By modeling the process after modern compiler infrastructures and physically-bas
 - **Video Generation:** MiniMax Hailuo-02 / Veo / Sora / Kling
 - **Local Processing:** MuseTalk, FFmpeg, Pydantic
 
-## 📖 Documentation
+## Documentation
 - [DESIGN.md](./DESIGN.md) - Comprehensive architectural deep-dive with provider abstraction and configuration system
 - [PROGRESS.md](./PROGRESS.md) - Current implementation status and roadmap
 
-## 🚦 Getting Started
+## Getting Started
 
 ### 1. Installation
 
@@ -43,25 +43,21 @@ pip install -r requirements.txt
 Each agent uses its own API key. Set them as environment variables:
 
 ```bash
-# Gemini agents (lore_master, screenwriter, director, qa_linter)
-export LORE_MASTER_API_KEY="your_gemini_api_key"
-export SCREENWRITER_API_KEY="your_gemini_api_key"
-export DIRECTOR_API_KEY="your_gemini_api_key"
-export QA_LINTER_API_KEY="your_gemini_api_key"
+# Gemini agents (indexer, lore_master, screenwriter, director, qa_linter)
+export GEMINI_FLASH_API_KEY="your_gemini_api_key"
+export GEMINI_PRO_API_KEY="your_gemini_api_key"
 
 # MiniMax agents (storyboarder, animator)
-export STORYBOARDER_API_KEY="your_minimax_api_key"
-export ANIMATOR_API_KEY="your_minimax_api_key"
+export MINIMAX_IMAGE_API_KEY="your_minimax_api_key"
+export MINIMAX_VIDEO_API_KEY="your_minimax_api_key"
 ```
 
 Or create a `.env` file:
 ```
-LORE_MASTER_API_KEY=your_gemini_api_key
-SCREENWRITER_API_KEY=your_gemini_api_key
-DIRECTOR_API_KEY=your_gemini_api_key
-QA_LINTER_API_KEY=your_gemini_api_key
-STORYBOARDER_API_KEY=your_minimax_api_key
-ANIMATOR_API_KEY=your_minimax_api_key
+GEMINI_FLASH_API_KEY=your_gemini_api_key
+GEMINI_PRO_API_KEY=your_gemini_api_key
+MINIMAX_IMAGE_API_KEY=your_minimax_api_key
+MINIMAX_VIDEO_API_KEY=your_minimax_api_key
 ```
 
 #### Customize Configuration (Optional)
@@ -72,55 +68,58 @@ Edit `config.yaml` to customize:
 - Generation settings (retries, thresholds)
 - Style presets for prompts
 
-### 3. Initialize a Project
+### 3. Create a Project
 
 ```bash
-python main.py init my_video_project
+python main.py create my_video_project novel.txt
 ```
 
 This creates a project directory with:
 ```
 my_video_project/
 ├── config.yaml          # Project-specific config
-├── novel.txt            # Place your source text here
-├── shots/               # Generated shot assets
-└── shared/              # Characters, locations, audio
-    ├── characters/
-    ├── locations/
-    └── audio/
+├── src/
+│   └── novel.txt        # Source novel
+├── assets/              # Generated assets
+│   ├── characters/      # Character profiles
+│   ├── locations/       # Location profiles
+│   ├── audio/           # Audio assets
+│   └── lore/            # Entity database
+├── index/               # Chapter index and metadata
+│   └── chapters/        # Individual chapter files
+├── scenes/              # Scene-based shot organization
+│   └── {scene_id}/
+│       ├── metadata.json
+│       └── shots/
+│           └── {shot_id}/
+│               ├── metadata.json
+│               ├── keyframe.png
+│               └── video.mp4
+├── cache/               # Cache files
+├── checkpoints/         # Pipeline checkpoints
+├── output/              # Final deliverables
+├── logs/                # Pipeline logs
+└── README.md            # Project documentation
 ```
 
-### 4. Run the Pipeline
+### 4. Run Pipeline Stages
 
 ```bash
-# Run with a project
-python main.py run --novel my_novel.txt --project my_video_project
+# Run individual stages
+python main.py index my_video_project      # Segment novel into chapters
+python main.py lore my_video_project       # Extract entities
+python main.py scenes my_video_project     # Break into scenes
+python main.py shots my_video_project      # Generate shot list
+python main.py storyboard my_video_project # Generate keyframes
+python main.py animate my_video_project    # Generate video clips
+python main.py qa my_video_project         # Quality assurance
+python main.py post-prod my_video_project  # Final assembly
 
-# Run specific stage only
-python main.py run --novel my_novel.txt --project my_video_project --stage pre_production
-
-# Resume from checkpoint
-python main.py run --resume-from my_video_project/checkpoints/checkpoint_005.json
-
-# Use custom config file
-CONFIG_PATH=/path/to/config.yaml python main.py run --novel my_novel.txt
+# Check status
+python main.py status my_video_project
 ```
 
-### 5. Backwards Compatibility
-
-The old API still works for quick tests:
-
-```python
-from main import run_pipeline
-
-# Simple usage (uses default config)
-run_pipeline("path/to/novel.txt")
-
-# With project
-run_pipeline("path/to/novel.txt", project_path="my_video_project")
-```
-
-## 🏗 Architecture Overview
+## Architecture Overview
 
 ### Provider Abstraction
 
@@ -148,61 +147,52 @@ Each agent is independently configured in `config.yaml`:
 
 ```yaml
 agents:
-  # High-token agents use Flash for cost efficiency
+  indexer:
+    model: gemini-flash
+    temperature: 0.1
   lore_master:
-    provider: "gemini"
-    model: "gemini-3.1-flash-preview"
-    api_key: "ENV:LORE_MASTER_API_KEY"
-    temperature: 0.2
-
+    model: gemini-flash
   screenwriter:
-    provider: "gemini"
-    model: "gemini-3.1-flash-preview"
-    api_key: "ENV:SCREENWRITER_API_KEY"
+    model: gemini-flash
     temperature: 0.3
-
-  # Reasoning-heavy agents use Pro
   director:
-    provider: "gemini"
-    model: "gemini-3.1-pro-preview"
-    api_key: "ENV:DIRECTOR_API_KEY"
-    temperature: 0.2
-
+    model: gemini-pro
   qa_linter:
-    provider: "gemini"
-    model: "gemini-3.1-pro-preview"
-    api_key: "ENV:QA_LINTER_API_KEY"
+    model: gemini-pro
     temperature: 0.0
-
+  storyboarder:
+    model: minimax-image
   animator:
-    provider: "minimax"
-    model: "MiniMax-Hailuo-02"
-    api_key: "ENV:ANIMATOR_API_KEY"
+    model: minimax-video
 ```
 
 ### Project Structure
 
-Projects use a shot-based organization:
-
 ```
 project/
-├── config.yaml
-├── novel.txt
-├── checkpoints/           # Pipeline state snapshots
-├── shared/               # Common assets
-│   ├── characters/      # Character reference images
-│   ├── locations/       # Background images
-│   └── audio/           # Music, sound effects
-└── shots/
-    ├── shot_001/
-    │   ├── metadata.json    # Shot IR
-    │   ├── keyframe.png     # Generated keyframe
-    │   ├── video.mp4        # Generated video
-    │   └── qa_report.json   # QA results
-    └── ...
+├── src/                   # Source materials
+│   └── novel.txt
+├── assets/                # Generated assets
+│   ├── characters/        # Character profiles
+│   ├── locations/         # Location profiles
+│   ├── audio/             # Audio assets
+│   └── lore/              # Entity database (entities.json)
+├── index/                 # Chapter index
+│   ├── project.json       # Project metadata
+│   ├── toc.json           # Table of contents
+│   └── chapters/          # Individual chapters
+├── scenes/                # Scene organization
+│   └── {scene_id}/
+│       ├── metadata.json
+│       └── shots/
+├── cache/                 # Cache files
+├── checkpoints/           # Pipeline checkpoints
+├── output/                # Final deliverables
+├── logs/                  # Pipeline logs
+└── config.yaml
 ```
 
-## 🎨 Configuration Reference
+## Configuration Reference
 
 ### Video Settings
 
@@ -211,8 +201,6 @@ video:
   style: "anime"              # anime, cinematic, realistic, cyberpunk
   resolution: "1080p"         # 720p, 1080p, 4k
   fps: 24
-  duration_per_shot: 4.0
-  aspect_ratio: "16:9"
 ```
 
 ### Generation Settings
@@ -235,7 +223,7 @@ style_presets:
     prompt_suffix: "Studio Ghibli inspired..."
 ```
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -248,7 +236,7 @@ pytest tests/test_director.py
 pytest --cov=src tests/
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Missing API Keys
 If you see `MISSING_ENV_XXX`, ensure the corresponding environment variable is set.
@@ -257,12 +245,9 @@ If you see `MISSING_ENV_XXX`, ensure the corresponding environment variable is s
 Check that the model names in `config.yaml` match the provider's available models.
 
 ### Checkpoint Issues
-To resume from a specific point:
-```bash
-python main.py run --resume-from path/to/checkpoint.json
-```
+To resume from a specific point, use the checkpoint files in `checkpoints/`.
 
-## 📄 License
+## License
 
 [Your License Here]
 

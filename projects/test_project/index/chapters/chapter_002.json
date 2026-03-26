@@ -1,0 +1,33 @@
+{
+  "id": "chapter_002",
+  "text_preview": "Chapter 2: The Discovery\n\nThe next morning, Sarah explored the grounds. In an old greenhouse at the far end of the property, she found a small golden locket with a strange symbol. When she showed it to Mr. Blackwood, he turned pale.\n\n\"Where did you find this?\" he demanded.\n\n\"In the greenhouse,\" Sarah replied.\n\n\"This belonged to my sister Eliza,\" he said quietly. \"She disappeared ten years ago. We never found her body.\"",
+  "full_text_length": 422,
+  "start_pos": 744,
+  "end_pos": 1168,
+  "embedding": [],
+  "metadata": {
+    "chapter_number": 2,
+    "chapter_title": "The Discovery",
+    "summary": "While exploring the grounds of the estate, Sarah discovers a golden locket in an old greenhouse. When she presents the item to Mr. Blackwood, he reveals it belonged to his sister, Eliza, who vanished without a trace a decade ago.",
+    "characters": [
+      "Sarah",
+      "Mr. Blackwood",
+      "Eliza"
+    ],
+    "locations": [
+      "Greenhouse",
+      "The property"
+    ],
+    "plot_events": [
+      "Exploration of the grounds",
+      "Discovery of a golden locket",
+      "Confrontation with Mr. Blackwood",
+      "Revelation about Eliza's disappearance"
+    ],
+    "emotional_tone": "Tense and mysterious",
+    "key_scenes": [
+      "Sarah finds the golden locket inside the dilapidated greenhouse.",
+      "Mr. Blackwood reacts with shock and reveals the tragic history of his missing sister."
+    ]
+  }
+}
