@@ -3,3 +3,5 @@ __pycache__/
 .env
 workspace/
 .pytest_cache/
+projects/test_project/
+test_novel.txt
