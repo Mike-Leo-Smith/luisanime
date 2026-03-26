@@ -3,28 +3,28 @@ from langchain_core.messages import HumanMessage
 
 from src.core.state import PipelineState, EntityState, SceneIR, Shot
 from src.utils.json_utils import extract_json
-from src.config import load_config
+from src.config import load_config, ConfigLoader
 
 
 def lore_master(state: PipelineState) -> PipelineState:
     print("--- LORE MASTER: Extracting Entities ---")
 
     config = load_config()
-    model_cfg = config.control_plane.agents["director_node"]
+    model_cfg = ConfigLoader.get_agent_config(config, "lore_master")
 
     llm = ChatGoogleGenerativeAI(
-        model=model_cfg.model,
-        google_api_key=model_cfg.api_key,
-        temperature=model_cfg.temperature,
+        model=model_cfg["model"],
+        google_api_key=model_cfg["api_key"],
+        temperature=model_cfg.get("temperature"),
     )
 
     prompt = f"""
     Extract key entities (characters, locations, unique items) from the following text.
     For each entity, specify its type (character, location, item) and a brief description.
     Return the result as a JSON object where keys are entity names.
-    
+
     Text: {state["novel_text"]}
-    
+
     Format:
     {{
         "Entity Name": {{"type": "character/location/item", "description": "..."}}
@@ -48,12 +48,12 @@ def screenwriter(state: PipelineState) -> PipelineState:
     print("--- SCREENWRITER: Chunking Scenes ---")
 
     config = load_config()
-    model_cfg = config.control_plane.agents["director_node"]
+    model_cfg = ConfigLoader.get_agent_config(config, "screenwriter")
 
     llm = ChatGoogleGenerativeAI(
-        model=model_cfg.model,
-        google_api_key=model_cfg.api_key,
-        temperature=model_cfg.temperature,
+        model=model_cfg["model"],
+        google_api_key=model_cfg["api_key"],
+        temperature=model_cfg.get("temperature"),
     )
 
     prompt = f"""
@@ -64,9 +64,9 @@ def screenwriter(state: PipelineState) -> PipelineState:
     - time_of_day: e.g., Day, Night, Dusk
     - characters: list of character names present
     - description: a concise summary of what happens in the scene.
-    
+
     Text: {state["novel_text"]}
-    
+
     Return the result as a JSON array of scene objects.
     """
 
@@ -92,31 +92,31 @@ def director(state: PipelineState) -> PipelineState:
     current_scene = state["scenes"][state["current_scene_index"]]
 
     config = load_config()
-    model_cfg = config.control_plane.agents["director_node"]
+    model_cfg = ConfigLoader.get_agent_config(config, "director")
 
     llm = ChatGoogleGenerativeAI(
-        model=model_cfg.model,
-        google_api_key=model_cfg.api_key,
-        temperature=model_cfg.temperature,
+        model=model_cfg["model"],
+        google_api_key=model_cfg["api_key"],
+        temperature=model_cfg.get("temperature"),
     )
 
     prompt = f"""
     Acting as a Film Director, convert the following scene description into a detailed Shot List for animation.
-    
+
     Scene: {current_scene.description}
     Location: {current_scene.location}
     Time of Day: {current_scene.time_of_day}
     Characters: {", ".join(current_scene.characters)}
-    
+
     For each shot, provide:
     - id: unique shot identifier (e.g., shot_1_1)
     - scene_id: {current_scene.id}
     - prompt: A highly detailed visual prompt for a video generation model.
     - camera_movement: e.g., Static, Pan Left, Zoom In, Crane Shot.
     - duration: duration in seconds (float).
-    
+
     Rule: Decompose complex physical interactions into safe, renderable montages.
-    
+
     Return the result as a JSON array of shot objects.
     """
 
