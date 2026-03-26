@@ -284,78 +284,29 @@ def run_pre_production(args):
 
     print("Running pre-production stage...")
 
-    # Check if indexer has already run
-    index_path = pm.current_project / "index" / "chapters.json"
-    if not index_path.exists():
-        print("Indexer not run yet. Running indexer first...")
-        from src.agents.indexer import text_segmenter
+    lore_dir = pm.current_project / "assets" / "lore"
+    toc_path = lore_dir / "toc.json"
 
-        novel_text = (pm.current_project / "src" / "novel.txt").read_text(
-            encoding="utf-8"
-        )
-
-        initial_state = PipelineState(
-            novel_text=novel_text,
-            current_chapter_id=args.name,
-            entity_graph={},
-            scenes=[],
-            current_scene_index=0,
-            shot_list=[],
-            current_shot_index=0,
-            retry_count=0,
-            last_error=None,
-            approved_clips=[],
-            project_dir=str(pm.current_project),
-            style=pm.project_config["video"]["style"],
-        )
-
-        state = text_segmenter(initial_state)
-        print(f"Indexer complete. Chapters segmented.")
-        print(f"Chapter DB: {pm.current_project / 'index' / 'chapters.json'}")
+    if not toc_path.exists():
+        print("Lore master not run yet. Running lore master first...")
+        run_indexer(args)
     else:
-        print(f"Using existing chapter DB: {index_path}")
+        print(f"Using existing lore data: {toc_path}")
 
-    if stage == "indexer":
-        print("Indexer stage complete.")
+    stage = getattr(args, "stage", "all")
+    if stage == "lore":
+        print("Lore stage complete.")
         return
 
-    # TODO: Add support for running individual stages (lore_master, screenwriter, director)
-    # For now, run full pipeline if stage is not indexer
-    if stage == "all":
-        print("Running full pre-production pipeline...")
-        # Load the (possibly indexed) text
-        from src.agents.indexer import ChapterDB
+    if stage in ("all", "scenes"):
+        print("Running screenwriter...")
+        run_screenwriter(args)
 
-        db = ChapterDB(index_path)
-        chapters = db.get_all_chapters()
+    if stage in ("all", "shots"):
+        print("Running director...")
+        run_director(args)
 
-        if chapters:
-            # Use first chapter's text for now
-            novel_text = chapters[0].text
-        else:
-            novel_text = (pm.current_project / "src" / "novel.txt").read_text(
-                encoding="utf-8"
-            )
-
-        initial_state = PipelineState(
-            novel_text=novel_text,
-            current_chapter_id=args.name,
-            entity_graph={},
-            scenes=[],
-            current_scene_index=0,
-            shot_list=[],
-            current_shot_index=0,
-            retry_count=0,
-            last_error=None,
-            approved_clips=[],
-            project_dir=str(pm.current_project),
-            style=pm.project_config["video"]["style"],
-        )
-
-        state = pipeline_app.invoke(initial_state)
-        print(f"Generated {len(state['shot_list'])} shots")
-    else:
-        print(f"Stage '{stage}' not yet implemented. Run 'indexer' or 'all'.")
+    print("\nPre-production complete!")
 
 
 def generate_assets(args):
