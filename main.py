@@ -169,8 +169,31 @@ def run_screenwriter(args):
         print(f"\nError: {result['last_error']}")
         sys.exit(1)
 
+    import json
+
+    scenes_dir = pm.current_project / "scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    scenes_file = scenes_dir / "scenes.json"
+
+    scenes_data = []
+    for scene in result["scenes"]:
+        scenes_data.append(
+            {
+                "id": scene.id,
+                "location": scene.location,
+                "time_of_day": scene.time_of_day,
+                "characters": scene.characters,
+                "description": scene.description,
+            }
+        )
+
+    scenes_file.write_text(
+        json.dumps(scenes_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
     print(f"\nScreenwriter complete!")
     print(f"  Scenes extracted: {len(result['scenes'])}")
+    print(f"  Saved to: {scenes_file}")
 
     if result["scenes"]:
         print("  Sample scenes:")
@@ -186,6 +209,8 @@ def run_director(args):
 
     from src.agents.director import director
     from src.core.state import PipelineState
+
+    import json
 
     print("Running director...")
 
@@ -222,8 +247,30 @@ def run_director(args):
         print(f"\nError: {result['last_error']}")
         sys.exit(1)
 
+    shots_dir = pm.current_project / "scenes" / "shots"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    shots_file = shots_dir / "shots.json"
+
+    shots_data = []
+    for shot in result["shot_list"]:
+        shots_data.append(
+            {
+                "id": shot.id,
+                "scene_id": shot.scene_id,
+                "prompt": shot.prompt,
+                "camera_movement": shot.camera_movement,
+                "duration": shot.duration,
+                "status": shot.status,
+            }
+        )
+
+    shots_file.write_text(
+        json.dumps(shots_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
     print(f"\nDirector complete!")
     print(f"  Shots generated: {len(result['shot_list'])}")
+    print(f"  Saved to: {shots_file}")
 
     if result["shot_list"]:
         print("  Sample shots:")
