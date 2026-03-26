@@ -130,8 +130,8 @@ Respond with valid JSON only."""
         payload = {
             "model": self.image_model,
             "prompt": prompt,
-            "width": config.width,
-            "height": config.height,
+            "aspect_ratio": "1:1",
+            "response_format": "url",
             "n": config.num_images,
         }
 
@@ -139,10 +139,16 @@ Respond with valid JSON only."""
         response.raise_for_status()
 
         data = response.json()
-        task_id = data.get("task_id")
+        base_resp = data.get("base_resp", {})
 
-        image_url = self._poll_image_task(task_id)
+        if base_resp.get("status_code") != 0:
+            raise Exception(f"Image generation failed: {base_resp.get('status_msg')}")
 
+        image_urls = data.get("data", {}).get("image_urls", [])
+        if not image_urls:
+            raise Exception("No image URLs in response")
+
+        image_url = image_urls[0]
         img_response = requests.get(image_url)
         img_response.raise_for_status()
 

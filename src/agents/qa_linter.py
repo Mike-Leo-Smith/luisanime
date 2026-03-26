@@ -1,6 +1,7 @@
 from src.core.state import PipelineState
 from src.schemas import QA_SCHEMA
 from src.agents.utils import get_llm_provider
+from src.agents.prompts import QA_LINTER_SYSTEM_PROMPT
 
 
 def qa_linter(state: PipelineState) -> PipelineState:
@@ -11,21 +12,16 @@ def qa_linter(state: PipelineState) -> PipelineState:
 
     provider = get_llm_provider(state, "qa_linter")
 
-    prompt = f"""Inspect the following generated video clip against the intended prompt.
-
-Intended Prompt: {shot.prompt}
+    user_prompt = f"""Intended Prompt: {shot.prompt}
 Video Path: {shot.video_url}
 
-Perform the following checks:
-1. Topological Check: Are there limb melting or multi-finger mutations?
-2. Consistency Check: Does the character match the established visual reference?
-3. Physical Hallucination: Are there impossible physics or fluid-like rigid bodies?
-
-Return your assessment following the JSON schema."""
+Evaluate this video against the intended prompt."""
 
     try:
         qa_result = provider.generate_structured(
-            prompt=prompt, response_schema=QA_SCHEMA
+            prompt=user_prompt,
+            response_schema=QA_SCHEMA,
+            system_prompt=QA_LINTER_SYSTEM_PROMPT,
         )
 
         status = qa_result.get("status", "rejected")

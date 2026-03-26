@@ -1,6 +1,7 @@
 from src.core.state import PipelineState, SceneIR
 from src.schemas import SCENE_SCHEMA
 from src.agents.utils import get_llm_provider, get_chapter_db
+from src.agents.prompts import SCREENWRITER_SYSTEM_PROMPT
 
 
 def screenwriter(state: PipelineState) -> PipelineState:
@@ -16,19 +17,21 @@ def screenwriter(state: PipelineState) -> PipelineState:
         for chapter in chapter_db.get_all_chapters():
             print(f"    Processing {chapter.id}...")
 
-            prompt = f"""Break the following chapter into logical scenes.
-
-Chapter: {chapter.metadata.chapter_title or chapter.id}
-Characters in chapter: {", ".join(chapter.metadata.characters[:10]) if chapter.metadata.characters else "N/A"}
+            user_prompt = f"""Chapter: {chapter.metadata.chapter_title or chapter.id}
+Characters: {", ".join(chapter.metadata.characters[:10]) if chapter.metadata.characters else "N/A"}
 
 Text:
 ---
 {chapter.text[:100000]}
----"""
+---
+
+Break this chapter into scenes following the schema."""
 
             try:
                 scenes_data = provider.generate_structured(
-                    prompt=prompt, response_schema=SCENE_SCHEMA
+                    prompt=user_prompt,
+                    response_schema=SCENE_SCHEMA,
+                    system_prompt=SCREENWRITER_SYSTEM_PROMPT,
                 )
                 for s in scenes_data:
                     s["chapter_id"] = chapter.id
@@ -39,13 +42,15 @@ Text:
         state["scenes"] = [SceneIR(**s) for s in all_scenes]
         print(f"  Extracted {len(all_scenes)} scenes total")
     else:
-        prompt = f"""Break the following novel text into a series of logical scenes.
+        user_prompt = f"""Text: {state["novel_text"]}
 
-Text: {state["novel_text"]}"""
+Break this text into scenes following the schema."""
 
         try:
             scenes_data = provider.generate_structured(
-                prompt=prompt, response_schema=SCENE_SCHEMA
+                prompt=user_prompt,
+                response_schema=SCENE_SCHEMA,
+                system_prompt=SCREENWRITER_SYSTEM_PROMPT,
             )
             state["scenes"] = [SceneIR(**s) for s in scenes_data]
         except Exception as e:

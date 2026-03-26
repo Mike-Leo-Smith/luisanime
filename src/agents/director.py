@@ -1,6 +1,7 @@
 from src.core.state import PipelineState, Shot
 from src.schemas import SHOT_SCHEMA
 from src.agents.utils import get_llm_provider, get_chapter_db
+from src.agents.prompts import DIRECTOR_SYSTEM_PROMPT
 
 
 def director(state: PipelineState) -> PipelineState:
@@ -20,28 +21,24 @@ def director(state: PipelineState) -> PipelineState:
         if chapter_id:
             chapter = chapter_db.get_chapter(chapter_id)
             if chapter:
-                context = f"""
-Chapter Context:
-- Title: {chapter.metadata.chapter_title or "N/A"}
-- Summary: {chapter.metadata.summary or "N/A"}
-- Key Events: {", ".join(chapter.metadata.plot_events[:5]) if chapter.metadata.plot_events else "N/A"}
+                context = f"""Chapter: {chapter.metadata.chapter_title or "N/A"}
+Summary: {chapter.metadata.summary or "N/A"}
 """
 
-    prompt = f"""Acting as a Film Director, convert the following scene description into a detailed Shot List for animation.
-{context}
-
+    user_prompt = f"""{context}
 Scene: {current_scene.description}
 Location: {current_scene.location}
 Time of Day: {current_scene.time_of_day}
 Characters: {", ".join(current_scene.characters)}
+Scene ID: {current_scene.id}
 
-Rule: Decompose complex physical interactions into safe, renderable montages.
-
-Generate shots with scene_id: {current_scene.id}"""
+Convert this scene into a detailed shot list following the schema."""
 
     try:
         shots_data = provider.generate_structured(
-            prompt=prompt, response_schema=SHOT_SCHEMA
+            prompt=user_prompt,
+            response_schema=SHOT_SCHEMA,
+            system_prompt=DIRECTOR_SYSTEM_PROMPT,
         )
         state["shot_list"] = [Shot(**s) for s in shots_data]
         state["current_shot_index"] = 0

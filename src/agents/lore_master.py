@@ -20,6 +20,7 @@ from src.schemas import (
     CHAPTER_METADATA_SCHEMA,
     ENTITY_SCHEMA,
 )
+from src.agents.prompts import LORE_MASTER_SYSTEM_PROMPT
 
 
 @dataclass
@@ -272,21 +273,22 @@ Extract the chapter metadata following the JSON schema."""
 def extract_entities(chapter: Chapter, provider) -> Dict[str, Dict]:
     """Extract entities from a chapter."""
 
-    prompt = f"""Extract key entities (characters, locations, unique items) from the following chapter.
-For each entity, specify its type (character, location, item) and a brief description.
-
-Chapter: {chapter.metadata.chapter_title or chapter.id}
+    user_prompt = f"""Chapter: {chapter.metadata.chapter_title or chapter.id}
 Summary: {chapter.metadata.summary or "N/A"}
 
 Text:
 ---
 {chapter.text[:100000]}
----"""
+---
+
+Extract all entities (characters, locations, items) from this chapter."""
 
     entities = {}
     try:
         entities_data = provider.generate_structured(
-            prompt=prompt, response_schema=ENTITY_SCHEMA
+            prompt=user_prompt,
+            response_schema=ENTITY_SCHEMA,
+            system_prompt=LORE_MASTER_SYSTEM_PROMPT,
         )
 
         for entity in entities_data:
