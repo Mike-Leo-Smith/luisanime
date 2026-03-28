@@ -2,8 +2,8 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.core.graph import app
-from src.core.state import PipelineState
+from src.pipeline.graph import app
+from src.pipeline.state import PipelineState
 from main import run_pipeline
 
 _ENTITIES_JSON = json.dumps(

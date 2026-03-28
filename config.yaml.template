@@ -59,9 +59,25 @@ models:
     duration: 6
     resolution: "1080p"
 
+  MiniMax-Hailuo-2.3:
+    provider: "minimax"
+    model: "MiniMax-Hailuo-2.3"
+    api_key: "ENV:MINIMAX_VIDEO_API_KEY"
+    duration: 6
+    resolution: "1080p"
+
+  # Gemini for image generation (Nano Banana 2)
+  gemini-image:
+    provider: "gemini"
+    model: "gemini-3.1-flash-image-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
+
 # Per-agent configurations
 # Each agent references a model and can override parameters
 agents:
+  indexer:
+    model: gemini-flash
+
   lore_master:
     model: gemini-flash
 
@@ -73,12 +89,16 @@ agents:
     model: gemini-flash
 
   storyboarder:
-    model: minimax-image
+    model: gemini-image
 
   animator:
-    model: minimax-video
+    model: MiniMax-Hailuo-2.3
 
-  qa_linter:
+  image_qa:
+    model: gemini-pro
+    temperature: 0.0  # Deterministic for QA
+
+  video_qa:
     model: gemini-pro
     temperature: 0.0  # Deterministic for QA
 

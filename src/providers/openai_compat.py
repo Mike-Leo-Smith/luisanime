@@ -59,6 +59,7 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
         prompt: str,
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
         config.temperature = 0.1
@@ -82,6 +83,7 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
         response_schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
 
@@ -144,6 +146,11 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
             },
             model=self.model,
         )
+
+    def analyze_video(
+        self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None
+    ) -> LLMResponse:
+        raise NotImplementedError("Video analysis not supported by OpenAI provider yet")
 
     def generate_image(
         self, prompt: str, config: Optional[ImageGenerationConfig] = None

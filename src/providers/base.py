@@ -15,7 +15,8 @@ class ImageGenerationConfig(GenerationConfig):
     width: int = 1024
     height: int = 1024
     num_images: int = 1
-    reference_image: Optional[str] = None
+    seed: Optional[int] = None
+    reference_image: Optional[bytes] = None
 
 
 @dataclass
@@ -23,6 +24,8 @@ class VideoGenerationConfig(GenerationConfig):
     duration: int = 6
     fps: int = 24
     resolution: str = "1080p"
+    first_frame: Optional[bytes] = None
+    last_frame: Optional[bytes] = None
 
 
 @dataclass
@@ -66,6 +69,7 @@ class BaseLLMProvider(ABC):
         prompt: str,
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         pass
 
@@ -76,6 +80,7 @@ class BaseLLMProvider(ABC):
         response_schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Any:
         """Generate structured output using JSON schema enforcement.
 
@@ -84,6 +89,7 @@ class BaseLLMProvider(ABC):
             response_schema: JSON schema defining the expected output structure
             system_prompt: Optional system prompt
             config: Optional generation configuration
+            media_path: Optional path to image or video file
 
         Returns:
             Parsed JSON matching the schema
@@ -93,6 +99,12 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
+    ) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def analyze_video(
+        self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
         pass
 

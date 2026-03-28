@@ -42,105 +42,6 @@ CHAPTER_METADATA_SCHEMA = {
     "required": ["characters", "locations", "plot_events", "key_scenes"],
 }
 
-ENTITY_SCHEMA = {
-    "type": "ARRAY",
-    "items": {
-        "type": "OBJECT",
-        "properties": {
-            "name": {
-                "type": "STRING",
-                "description": "Name of the entity",
-            },
-            "entity_type": {
-                "type": "STRING",
-                "enum": ["character", "location", "item"],
-                "description": "Type of entity",
-            },
-            "description": {
-                "type": "STRING",
-                "description": "Brief description of the entity",
-            },
-        },
-        "required": ["name", "entity_type", "description"],
-    },
-}
-
-SCENE_SCHEMA = {
-    "type": "ARRAY",
-    "items": {
-        "type": "OBJECT",
-        "properties": {
-            "id": {
-                "type": "STRING",
-                "description": "Unique scene identifier (e.g., scene_1)",
-            },
-            "location": {
-                "type": "STRING",
-                "description": "Where the scene takes place",
-            },
-            "time_of_day": {
-                "type": "STRING",
-                "description": "Time of day (e.g., Day, Night, Dusk)",
-            },
-            "characters": {
-                "type": "ARRAY",
-                "items": {"type": "STRING"},
-                "description": "List of character names present in the scene",
-            },
-            "description": {
-                "type": "STRING",
-                "description": "Concise summary of what happens in the scene",
-            },
-        },
-        "required": ["id", "location", "time_of_day", "characters", "description"],
-    },
-}
-
-SHOT_SCHEMA = {
-    "type": "ARRAY",
-    "items": {
-        "type": "OBJECT",
-        "properties": {
-            "id": {
-                "type": "STRING",
-                "description": "Unique shot identifier (e.g., shot_1_1)",
-            },
-            "scene_id": {"type": "STRING", "description": "Reference to parent scene"},
-            "prompt": {
-                "type": "STRING",
-                "description": "Detailed visual prompt for video generation model",
-            },
-            "camera_movement": {
-                "type": "STRING",
-                "description": "Camera movement (e.g., Static, Pan Left, Zoom In, Crane Shot)",
-            },
-            "duration": {"type": "NUMBER", "description": "Duration in seconds"},
-        },
-        "required": ["id", "scene_id", "prompt", "camera_movement", "duration"],
-    },
-}
-
-QA_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "status": {
-            "type": "STRING",
-            "enum": ["approved", "rejected"],
-            "description": "Whether the video passes QA",
-        },
-        "reason": {
-            "type": "STRING",
-            "description": "Explanation for the decision",
-        },
-        "issues": {
-            "type": "ARRAY",
-            "items": {"type": "STRING"},
-            "description": "List of specific issues found (e.g., limb melting, inconsistency)",
-        },
-    },
-    "required": ["status", "reason"],
-}
-
 CHAPTER_BOUNDARY_SCHEMA = {
     "type": "ARRAY",
     "items": {
@@ -162,4 +63,169 @@ CHAPTER_BOUNDARY_SCHEMA = {
         },
         "required": ["chapter_number", "start_marker"],
     },
+}
+
+L3_PATCH_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "mutations": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "entity_id": {"type": "STRING"},
+                    "mutation_type": {
+                        "type": "STRING",
+                        "enum": ["inventory_add", "inventory_remove", "inventory_modify", "physical_status_update", "appearance_update"]
+                    },
+                    "attribute_path": {"type": "STRING"},
+                    "new_value": {"type": "STRING"}
+                },
+                "required": ["entity_id", "mutation_type", "attribute_path", "new_value"]
+            }
+        }
+    },
+    "required": ["mutations"]
+}
+
+SCENE_IR_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "scenes": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "scene_id": {"type": "STRING"},
+                    "environment": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "location": {"type": "STRING"},
+                            "time_of_day": {"type": "STRING", "enum": ["Day", "Night", "Dusk", "Dawn", "Unknown"]},
+                            "weather_lighting": {"type": "STRING"}
+                        },
+                        "required": ["location", "time_of_day"]
+                    },
+                    "active_entities": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    },
+                    "chronological_actions": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    }
+                },
+                "required": ["scene_id", "environment", "active_entities", "chronological_actions"]
+            }
+        }
+    },
+    "required": ["scenes"]
+}
+
+ART_STYLE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "reasoning": {"type": "STRING"},
+        "palette": {
+            "type": "OBJECT",
+            "properties": {
+                "primary": {"type": "STRING"},
+                "secondary": {"type": "STRING"},
+                "lighting_mood": {"type": "STRING"}
+            },
+            "required": ["primary", "secondary", "lighting_mood"]
+        },
+        "character_consistency": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "name": {"type": "STRING"},
+                    "version_name": {"type": "STRING", "description": "e.g. Young, Aged, In-Disguise"},
+                    "visual_markers": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "outfit_details": {"type": "STRING"}
+                },
+                "required": ["name", "version_name", "visual_markers"]
+            }
+        },
+        "technical_specs": {
+            "type": "OBJECT",
+            "properties": {
+                "negative_prompt": {"type": "STRING"},
+                "aspect_ratio": {"type": "STRING"}
+            }
+        }
+    },
+    "required": ["reasoning", "palette", "character_consistency"]
+}
+
+SHOT_LIST_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "reasoning": {"type": "STRING"},
+        "shots": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "shot_id": {"type": "STRING"},
+                    "scene_id": {"type": "STRING"},
+                    "camera": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "framing": {"type": "STRING", "enum": ["Extreme Close-up", "Close-up", "Medium Shot", "Full Shot", "Wide Shot"]},
+                            "movement": {"type": "STRING", "enum": ["Static", "Pan Left", "Pan Right", "Tilt Up", "Tilt Down", "Zoom In", "Zoom Out"]}
+                        },
+                        "required": ["framing", "movement"]
+                    },
+                    "visual_payload": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "prompt_begin": {"type": "STRING", "description": "Visual state at the start of the shot"},
+                            "prompt_end": {"type": "STRING", "description": "Visual state at the end of the shot"},
+                            "negative_prompt": {"type": "STRING"}
+                        },
+                        "required": ["prompt_begin", "prompt_end"]
+                    },
+                    "routing_flags": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "requires_lip_sync": {"type": "BOOLEAN"},
+                            "rigid_body_only": {"type": "BOOLEAN"}
+                        },
+                        "required": ["requires_lip_sync", "rigid_body_only"]
+                    },
+                    "qa_checklist": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    }
+                },
+                "required": ["shot_id", "camera", "visual_payload", "routing_flags", "qa_checklist"]
+            }
+        }
+    },
+    "required": ["reasoning", "shots"]
+}
+
+QA_EVALUATION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "reasoning": {"type": "STRING"},
+        "is_pass": {"type": "BOOLEAN"},
+        "failed_frames": {
+            "type": "ARRAY", 
+            "items": {"type": "STRING", "enum": ["begin", "end"]},
+            "description": "List of frames that failed QA and need regeneration"
+        },
+        "failure_details": {
+            "type": "OBJECT",
+            "properties": {
+                "failed_checklist_index": {"type": "INTEGER"},
+                "failure_reason": {"type": "STRING"},
+                "mitigation_suggestion": {"type": "STRING"}
+            },
+            "required": ["failed_checklist_index", "failure_reason", "mitigation_suggestion"]
+        }
+    },
+    "required": ["reasoning", "is_pass"]
 }

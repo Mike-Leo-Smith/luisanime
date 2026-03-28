@@ -56,7 +56,7 @@ project/
 
 **Access via ProjectManager:**
 ```python
-from src.core.project import ProjectManager
+from src.pipeline.project import ProjectManager
 
 pm = ProjectManager("./projects")
 pm.load_project("my_project")
@@ -101,7 +101,7 @@ def my_agent(state: PipelineState) -> PipelineState:
 ### Agent File Template
 
 ```python
-from src.core.state import PipelineState
+from src.pipeline.state import PipelineState
 from src.schemas import SOME_SCHEMA
 from src.agents.utils import get_llm_provider
 
@@ -317,7 +317,7 @@ src/agents/
 
 ```python
 # src/agents/my_agent.py
-from src.core.state import PipelineState, SomeIR
+from src.pipeline.state import PipelineState, SomeIR
 from src.schemas import MY_SCHEMA
 from src.agents.utils import get_llm_provider, get_chapter_db
 

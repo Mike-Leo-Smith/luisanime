@@ -81,6 +81,7 @@ class MiniMaxProvider(BaseLLMProvider, BaseImageProvider, BaseVideoProvider):
         prompt: str,
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
         config.temperature = 0.1
@@ -104,6 +105,7 @@ class MiniMaxProvider(BaseLLMProvider, BaseImageProvider, BaseVideoProvider):
         response_schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
 
@@ -114,12 +116,17 @@ You must respond with a JSON object that follows this schema:
 
 Respond with valid JSON only."""
 
-        return self.generate_json(schema_prompt, system_prompt, config)
+        return self.generate_json(schema_prompt, system_prompt, config, media_path=media_path)
 
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
         raise NotImplementedError("Image analysis not supported by MiniMax")
+
+    def analyze_video(
+        self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None
+    ) -> LLMResponse:
+        raise NotImplementedError("Video analysis not supported by MiniMax")
 
     def generate_image(
         self, prompt: str, config: Optional[ImageGenerationConfig] = None
@@ -135,12 +142,13 @@ Respond with valid JSON only."""
             "n": config.num_images,
         }
 
+        if config.seed is not None:
+            payload["seed"] = config.seed
+
         if config.reference_image:
             import base64
 
-            with open(config.reference_image, "rb") as f:
-                image_data = base64.b64encode(f.read()).decode("utf-8")
-
+            image_data = base64.b64encode(config.reference_image).decode("utf-8")
             payload["subject_reference"] = [
                 {
                     "type": "character",
@@ -213,12 +221,23 @@ Respond with valid JSON only."""
             "duration": config.duration,
         }
 
-        if image_path:
+        if config.first_frame:
+            import base64
+
+            image_base64 = base64.b64encode(config.first_frame).decode("utf-8")
+            payload["first_frame_image"] = f"data:image/png;base64,{image_base64}"
+        elif image_path:
             with open(image_path, "rb") as f:
                 import base64
 
                 image_base64 = base64.b64encode(f.read()).decode("utf-8")
             payload["first_frame_image"] = f"data:image/png;base64,{image_base64}"
+
+        if config.last_frame:
+            import base64
+
+            image_base64 = base64.b64encode(config.last_frame).decode("utf-8")
+            payload["last_frame_image"] = f"data:image/png;base64,{image_base64}"
 
         response = requests.post(url, headers=self.headers, json=payload)
         response.raise_for_status()

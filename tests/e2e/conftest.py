@@ -3,7 +3,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.core.state import PipelineState, SceneIR, Shot, EntityState
+from src.pipeline.state import PipelineState, SceneIR, Shot, EntityState
 
 _HERE = os.path.dirname(__file__)
 _TEST_NOVEL_PATH = os.path.join(_HERE, "test_project", "novel.txt")

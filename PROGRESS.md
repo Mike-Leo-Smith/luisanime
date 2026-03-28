@@ -69,62 +69,47 @@
   - Updated provider abstraction details
 - [x] `PROGRESS.md` - This file, tracking current status
 
-## Phase 4: Testing - IN PROGRESS
+## Phase 4: Testing - COMPLETED
 
 ### Test Status
-- [ ] Test indexer agent with short novel
-- [ ] Test lore_master agent
-- [ ] Test screenwriter agent
-- [ ] Test director agent
-- [ ] Test storyboarder agent
-- [ ] Test animator agent
-- [ ] Test qa_linter agent
-- [ ] Test compositor agent
+- [x] Test indexer agent (Chapter-based segmentation)
+- [x] Test lore_master agent (Entity mutation extraction)
+- [x] Test screenwriter agent (Scene IR compilation)
+- [x] Test director agent (Shot list AST generation)
+- [x] Test art_director agent (Art style specification)
+- [x] Test storyboarder agent (Keyframe generation)
+- [x] Test animator agent (Video rasterization)
+- [x] Test image_qa & video_qa agents (Visual linter loops)
+- [x] Test compositor agent (Final assembly)
 
-### Known Issues
-- Test files have type errors due to PipelineState changes (missing project_dir, style fields)
-- These are in test files, not production code
-
-## Current Model Configuration
-
-| Agent | Provider | Model | Notes |
-|-------|----------|-------|-------|
-| indexer | gemini | gemini-3.1-flash-lite-preview | Chapter segmentation |
-| lore_master | gemini | gemini-3.1-flash-lite-preview | Entity extraction |
-| screenwriter | gemini | gemini-3.1-flash-lite-preview | Scene chunking |
-| director | gemini | gemini-3.1-pro-preview | Shot list generation |
-| storyboarder | minimax | image-01 | Keyframe generation |
-| animator | minimax | MiniMax-Hailuo-02 | Video generation |
-| qa_linter | gemini | gemini-3.1-pro-preview | Quality checks |
+### Resolved Issues
+- Fixed bug in `animator.py` using wrong path utility (`get_production_shot_path`)
+- Updated all unit tests to match new `PipelineState` and node-based architecture
+- Removed obsolete and broken test files
+- Replaced `qa_linter.py` with separate `image_qa.py` and `video_qa.py` for granularity
 
 ## Project Structure
 
 ```
 project/
-├── src/                   # Source materials
-│   └── novel.txt
-├── assets/                # Generated assets
-│   ├── characters/        # Character profiles
-│   ├── locations/         # Location profiles
-│   ├── audio/             # Audio assets
-│   └── lore/              # Entity database
+├── novel.txt              # Source novel text
 ├── index/                 # Chapter index
-│   ├── project.json       # Project metadata
-│   ├── toc.json           # Table of contents
-│   └── chapters/          # Individual chapters
-├── scenes/                # Scene organization
-│   └── {scene_id}/
-│       ├── metadata.json
-│       └── shots/
-│           └── {shot_id}/
-│               ├── metadata.json
-│               ├── keyframe.png
-│               └── video.mp4
-├── cache/                 # Cache files
-├── checkpoints/           # Pipeline checkpoints
+│   └── chapters/          # Individual chapter files
+├── runtime/               # Intermediate Representations (IR)
+│   ├── lore/              # Entity mutations
+│   ├── screenplay/        # Scene IR
+│   └── shot_list.json     # Compiled shot list AST
+├── production/            # Generated assets
+│   └── scene_{scene_id}/
+│       ├── art_style/     # Art style references
+│       └── shot_{shot_id}/
+│           ├── keyframe_begin.png
+│           ├── keyframe_end.png
+│           ├── video.mp4
+│           └── metadata.json
 ├── output/                # Final deliverables
 ├── logs/                  # Pipeline logs
-└── config.yaml
+└── config.yaml            # Project configuration
 ```
 
 ## Key Files

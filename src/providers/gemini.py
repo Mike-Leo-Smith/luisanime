@@ -1,7 +1,8 @@
 import json
 import base64
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
 from google import genai
 from google.genai import types
 from .base import (
@@ -23,10 +24,35 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
     ):
         self.api_key = api_key
         self.model = model
-        self.image_model = image_model or "imagen-4.0-generate-001"
+        self.image_model = image_model or "gemini-3.1-flash-image-preview"
+        # Using v1alpha for experimental multimodal features
         self.client = genai.Client(
             api_key=api_key, http_options={"api_version": "v1alpha"}
         )
+
+    def _upload_media(self, media_path: str) -> Any:
+        path = Path(media_path)
+        mime_type = "image/png"
+        if path.suffix.lower() in [".mp4", ".mpeg", ".mov", ".avi"]:
+            mime_type = "video/mp4"
+        elif path.suffix.lower() in [".jpg", ".jpeg"]:
+            mime_type = "image/jpeg"
+        
+        print(f"  [GeminiProvider] Uploading {path.name} ({mime_type})...")
+        file = self.client.files.upload(file=str(path))
+        
+        # Robust polling for Video/Large images
+        if mime_type.startswith("video") or path.stat().st_size > 10 * 1024 * 1024:
+            print(f"  [GeminiProvider] Waiting for file {file.name} to be processed...")
+            while file.state.name == "PROCESSING":
+                time.sleep(2)
+                file = self.client.files.get(name=file.name)
+            
+            if file.state.name == "FAILED":
+                raise ValueError(f"File processing failed: {file.name}")
+            print(f"  [GeminiProvider] File {file.name} is ACTIVE.")
+        
+        return file
 
     def generate_text(
         self,
@@ -35,44 +61,19 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         config: Optional[GenerationConfig] = None,
     ) -> LLMResponse:
         config = config or GenerationConfig()
-
-        contents = prompt
-        if system_prompt:
-            contents = f"{system_prompt}\n\n{prompt}"
-
         response = self.client.models.generate_content(
             model=self.model,
-            contents=contents,
+            contents=prompt,
             config=types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
                 temperature=config.temperature,
                 max_output_tokens=config.max_tokens,
-                top_p=config.top_p,
             ),
         )
-
-        text = response.text or ""
-        prompt_tokens = (
-            int(response.usage_metadata.prompt_token_count)
-            if response.usage_metadata
-            and response.usage_metadata.prompt_token_count is not None
-            else 0
-        )
-        completion_tokens = (
-            int(response.usage_metadata.candidates_token_count)
-            if response.usage_metadata
-            and response.usage_metadata.candidates_token_count is not None
-            else 0
-        )
         return LLMResponse(
-            text=text,
-            usage={
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-            },
+            text=response.text or "",
+            usage={},
             model=self.model,
-            finish_reason=str(response.candidates[0].finish_reason)
-            if response.candidates
-            else None,
         )
 
     def generate_json(
@@ -80,22 +81,27 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         prompt: str,
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
-        config.temperature = 0.1
+        
+        contents = []
+        if media_path:
+            file = self._upload_media(media_path)
+            contents.append(file)
+        
+        contents.append(prompt)
 
-        json_prompt = f"{prompt}\n\nRespond with valid JSON only."
-        response = self.generate_text(json_prompt, system_prompt, config)
-
-        text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        return json.loads(text.strip())
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
+                temperature=config.temperature,
+                response_mime_type="application/json",
+            ),
+        )
+        return json.loads(response.text or "{}")
 
     def generate_structured(
         self,
@@ -103,86 +109,82 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         response_schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
         config: Optional[GenerationConfig] = None,
+        media_path: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
         config = config or GenerationConfig()
-
-        contents = prompt
-        if system_prompt:
-            contents = f"{system_prompt}\n\n{prompt}"
+        
+        contents = []
+        if media_path:
+            paths = [media_path] if isinstance(media_path, str) else media_path
+            for p in paths:
+                file = self._upload_media(p)
+                contents.append(file)
+        
+        contents.append(prompt)
 
         response = self.client.models.generate_content(
             model=self.model,
             contents=contents,
             config=types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
                 temperature=config.temperature,
-                max_output_tokens=config.max_tokens,
-                top_p=config.top_p,
+                response_mime_type="application/json",
                 response_schema=response_schema,
             ),
         )
+        return json.loads(response.text or "{}")
 
-        text = response.text or "{}"
-        return json.loads(text)
+    def generate_image(
+        self, 
+        prompt: str, 
+        config: Optional[ImageGenerationConfig] = None,
+        reference_media: Optional[Union[str, List[str]]] = None
+    ) -> ImageResponse:
+        """
+        Multimodal image generation. 
+        Supports providing reference images/video in the content stream.
+        """
+        contents = []
+        if reference_media:
+            paths = [reference_media] if isinstance(reference_media, str) else reference_media
+            for p in paths:
+                file = self._upload_media(p)
+                contents.append(file)
+        
+        contents.append(prompt)
+
+        print(f"  [GeminiProvider] Generating image with {self.image_model}...")
+        response = self.client.models.generate_content(
+            model=self.image_model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+            ),
+        )
+        
+        for candidate in response.candidates:
+            for part in candidate.content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    return ImageResponse(
+                        image_bytes=part.inline_data.data,
+                        mime_type=part.inline_data.mime_type,
+                        usage={},
+                        model=self.image_model,
+                    )
+        raise ValueError(f"No image part found in {self.image_model} response")
 
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
-        config = config or GenerationConfig()
-
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-
-        image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
-
+        file = self._upload_media(image_path)
         response = self.client.models.generate_content(
             model=self.model,
-            contents=[prompt, image_part],
-            config=types.GenerateContentConfig(
-                temperature=config.temperature,
-                max_output_tokens=config.max_tokens,
-            ),
+            contents=[file, prompt],
         )
+        return LLMResponse(text=response.text or "", usage={}, model=self.model)
 
-        text = response.text or ""
-        prompt_tokens = 0
-        completion_tokens = 0
-        if response.usage_metadata:
-            prompt_tokens = response.usage_metadata.prompt_token_count or 0
-            completion_tokens = response.usage_metadata.candidates_token_count or 0
-        return LLMResponse(
-            text=text,
-            usage={
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-            },
-            model=self.model,
-        )
-
-    def generate_image(
-        self, prompt: str, config: Optional[ImageGenerationConfig] = None
-    ) -> ImageResponse:
-        config = config or ImageGenerationConfig()
-
-        response = self.client.models.generate_images(
-            model=self.image_model,
-            prompt=prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=config.num_images,
-            ),
-        )
-
-        if not response.generated_images or len(response.generated_images) == 0:
-            raise ValueError("No image data returned")
-        img = response.generated_images[0].image
-        if img is None or img.image_bytes is None:
-            raise ValueError("No image data returned")
-
-        return ImageResponse(
-            image_bytes=img.image_bytes,
-            mime_type="image/png",
-            usage={"prompt_tokens": 0, "completion_tokens": 0},
-            model=self.image_model,
-        )
+    def analyze_video(self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None) -> LLMResponse:
+        return self.analyze_image(video_path, prompt, config)
 
     def edit_image(
         self,
@@ -190,4 +192,4 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         prompt: str,
         config: Optional[ImageGenerationConfig] = None,
     ) -> ImageResponse:
-        raise NotImplementedError("Image editing not implemented for Gemini")
+        raise NotImplementedError("Image editing not yet implemented for GeminiProvider")

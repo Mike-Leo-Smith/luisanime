@@ -43,7 +43,7 @@ pip install -r requirements.txt
 Each agent uses its own API key. Set them as environment variables:
 
 ```bash
-# Gemini agents (indexer, lore_master, screenwriter, director, qa_linter)
+# Gemini agents (indexer, lore_master, screenwriter, director, image_qa, video_qa)
 export GEMINI_FLASH_API_KEY="your_gemini_api_key"
 export GEMINI_PRO_API_KEY="your_gemini_api_key"
 
@@ -157,7 +157,10 @@ agents:
     temperature: 0.3
   director:
     model: gemini-pro
-  qa_linter:
+  image_qa:
+    model: gemini-pro
+    temperature: 0.0
+  video_qa:
     model: gemini-pro
     temperature: 0.0
   storyboarder:

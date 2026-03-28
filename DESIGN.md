@@ -112,43 +112,34 @@ Resume from any checkpoint:
 
 ```
 project/
-├── src/                       # Source materials
-│   └── novel.txt              # Source novel text
-├── assets/                    # Generated assets
-│   ├── characters/            # Character profiles (JSON)
-│   ├── locations/             # Location profiles (JSON)
-│   ├── audio/                 # Audio assets (music, SFX)
-│   └── lore/                  # Entity database
-│       └── entities.json      # Extracted entities
-├── index/                     # Chapter index
-│   ├── project.json           # Project metadata
-│   ├── toc.json               # Table of contents
-│   └── chapters/              # Individual chapter files
-│       ├── chapter_001.json
-│       ├── chapter_001.txt
-│       └── ...
-├── scenes/                    # Scene-based organization
-│   └── {scene_id}/
-│       ├── metadata.json      # Scene metadata
-│       └── shots/             # Shot assets
-│           └── {shot_id}/
-│               ├── metadata.json    # Shot IR
-│               ├── keyframe.png     # Generated keyframe
-│               └── video.mp4        # Generated video
-├── cache/                     # Cache files
-├── checkpoints/               # Pipeline state snapshots
-├── output/                    # Final deliverables
-├── logs/                      # Pipeline logs
-├── config.yaml                # Project configuration
-└── README.md                  # Project documentation
+├── novel.txt              # Source novel text
+├── index/                 # Chapter index
+│   └── chapters/          # Individual chapter files (.json, .txt)
+├── runtime/               # Intermediate Representations (IR)
+│   ├── lore/              # Entity database (mutations.json)
+│   ├── screenplay/        # Scene IR (scenes.json)
+│   └── shot_list.json     # Compiled shot list AST
+├── production/            # Generated assets organized by scene and shot
+│   └── scene_{scene_id}/
+│       ├── art_style/     # Art style references
+│       └── shot_{shot_id}/
+│           ├── keyframe_begin.png
+│           ├── keyframe_end.png
+│           ├── video.mp4
+│           └── metadata.json
+├── output/                # Final deliverables
+├── logs/                  # Pipeline logs
+├── config.yaml            # Project configuration
+└── README.md              # Project documentation
 ```
+
 
 ### 5.2 Project Manager
 
 The `ProjectManager` handles asset paths and organization:
 
 ```python
-from src.core.project import ProjectManager
+from src.pipeline.project import ProjectManager
 
 pm = ProjectManager("./projects")
 pm.load_project("my_project")
@@ -214,7 +205,10 @@ agents:
     model: minimax-image
   animator:
     model: minimax-video
-  qa_linter:
+  image_qa:
+    model: gemini-pro
+    temperature: 0.0
+  video_qa:
     model: gemini-pro
     temperature: 0.0
 ```

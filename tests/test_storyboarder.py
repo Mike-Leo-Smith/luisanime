@@ -1,54 +1,60 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.core.state import PipelineState, Shot
-from src.core.graph import storyboarder
+from pathlib import Path
+from src.pipeline.state import PipelineState
+from src.agents.storyboarder import storyboarder
 
-def test_storyboarder_generates_keyframe():
-    # For Storyboarder, we need to mock whatever image API we use.
-    # If we use a LangChain-compatible image model or a custom wrapper.
-    # Let's assume for now we use a custom utility or the same Gemini 
-    # model to "describe" the image and a mock image generator.
+def test_storyboarder_generates_keyframes():
+    # Setup mock Image provider
+    mock_image_provider = MagicMock()
+    mock_image_provider.generate_image.return_value = MagicMock(image_bytes=b"fake_image_bytes")
+
+    # Setup: Initial state
+    shot = {
+        "shot_id": "shot_1",
+        "scene_id": "scene_1",
+        "visual_payload": {"prompt": "A man in the forest"},
+        "camera_payload": {"movement": "static"},
+        "qa_checklist": []
+    }
     
-    # Let's mock a hypothetical Image API call
-    with patch("src.agents.asset_locking.load_config") as mock_config_load:
-        mock_cfg = MagicMock()
-        mock_cfg.render_plane.storyboarder.api_key = "fake_key"
-        mock_config_load.return_value = mock_cfg
+    initial_state: PipelineState = {
+        "project_dir": "/tmp/test_project",
+        "style": "anime",
+        "config": {},
+        "novel_text": "...",
+        "current_chapter_id": "test",
+        "l3_graph_mutations": [],
+        "scene_ir_blocks": [],
+        "current_scene_index": 0,
+        "shot_list_ast": [shot],
+        "current_shot_index": 0,
+        "art_style_spec": {"palette": {"primary": "blue", "lighting_mood": "dark"}},
+        "current_keyframe_url": None,
+        "image_retry_count": 0,
+        "image_qa_feedback": None,
+        "current_video_candidate_url": None,
+        "video_retry_count": 0,
+        "video_qa_feedback": None,
+        "physics_downgrade_required": False,
+        "style_redefinition_required": False,
+        "approved_video_assets": [],
+        "final_video_path": None,
+        "last_error": None
+    }
+    
+    # Mocking paths and utilities
+    with patch("src.agents.storyboarder.get_image_provider", return_value=mock_image_provider), \
+         patch("src.agents.storyboarder.get_production_scene_path", return_value=Path("/tmp/test_project/production/scene_1")), \
+         patch("src.agents.storyboarder.get_production_shot_path", side_effect=lambda state, sid, shid, *args: Path(f"/tmp/test_project/production/{sid}/{shid}").joinpath(*args) if args else Path(f"/tmp/test_project/production/{sid}/{shid}")), \
+         patch("src.agents.storyboarder.save_agent_metadata"), \
+         patch("src.agents.storyboarder.pack_images"), \
+         patch("pathlib.Path.write_bytes"):
         
-        # Mocking a hypothetical image generation function in src.utils
-        # or assuming the node does it directly.
-        # For now, let's mock the internal implementation detail or just the 
-        # expected outcome if we use a specific library.
-        
-        initial_shot = Shot(
-            id="shot_1_1",
-            scene_id="scene_1",
-            prompt="A man in the forest",
-            camera_movement="Static",
-            duration=3.0
-        )
-        
-        initial_state: PipelineState = {
-            "novel_text": "...",
-            "current_chapter_id": "ch1",
-            "entity_graph": {},
-            "scenes": [],
-            "current_scene_index": 0,
-            "shot_list": [initial_shot],
-            "current_shot_index": 0,
-            "retry_count": 0,
-            "last_error": None,
-            "approved_clips": []
-        }
-        
-        # Mocking the actual image generation (e.g., Nano Banana 2 via Google API)
-        # We'll need a real implementation in graph.py
-        with patch("src.agents.asset_locking.generate_image_keyframe") as mock_gen:
-            mock_gen.return_value = "https://example.com/keyframe.jpg"
-            
-            # Act
-            new_state = storyboarder(initial_state)
-            
-            # Assert
-            assert new_state["shot_list"][0].keyframe_url == "https://example.com/keyframe.jpg"
-            assert new_state["shot_list"][0].status == "storyboarded"
+        # Act
+        new_state = storyboarder(initial_state)
+    
+    # Assert
+    assert "current_keyframe_url" in new_state
+    assert new_state["current_keyframe_url"] == "/tmp/test_project/production/scene_1/shot_1/keyframe_begin.png"
+    assert mock_image_provider.generate_image.call_count == 2

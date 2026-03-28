@@ -1,49 +1,69 @@
-from src.core.state import PipelineState, Shot
-from src.schemas import SHOT_SCHEMA
-from src.agents.utils import get_llm_provider, get_chapter_db
+from typing import Dict, Any
+from pathlib import Path
+import json
+from src.pipeline.state import PipelineState
+from src.schemas import SHOT_LIST_SCHEMA
+from src.agents.utils import get_llm_provider, get_runtime_path
 from src.agents.prompts import DIRECTOR_SYSTEM_PROMPT
 
+def director(state: PipelineState) -> Dict:
+    print("🎬 [Director] Resolving spatial constraints...")
+    
+    # Bypass removed to allow schema update (prompt_begin/end)
+    # save_path = get_runtime_path(state, "shot_list.json")
+    
+    scenes = state.get("scene_ir_blocks", [])
+    if not scenes:
+        print("  Error: No scene IR blocks found.")
+        return {"last_error": "No scene IR blocks"}
 
-def director(state: PipelineState) -> PipelineState:
-    print("--- DIRECTOR: Generating Shot List ---")
-
-    if not state["scenes"]:
-        print("No scenes found to direct.")
-        return state
-
-    current_scene = state["scenes"][state["current_scene_index"]]
+    idx = state.get("current_scene_index", 0)
+    scene = scenes[idx]
     provider = get_llm_provider(state, "director")
-    chapter_db = get_chapter_db(state)
+    
+    fallback_instruction = ""
+    if state.get("physics_downgrade_required"):
+        fallback_instruction = """🚨 FALLBACK TRIGGERED: MANDATORY DEGRADATION."""
 
-    context = ""
-    if chapter_db:
-        chapter_id = getattr(current_scene, "chapter_id", None)
-        if chapter_id:
-            chapter = chapter_db.get_chapter(chapter_id)
-            if chapter:
-                context = f"""Chapter: {chapter.metadata.chapter_title or "N/A"}
-Summary: {chapter.metadata.summary or "N/A"}
+    user_prompt = f"""{fallback_instruction}
+Original Prose: {scene.get('source_prose', 'N/A')}
+Scene IR: {scene}
+L3 Entity Graph: {state.get('l3_graph_mutations', [])}
+Master Art Style: {state.get('master_art_spec', {})}
+
+Generate a detailed shot list. 
+For each shot, provide high-detail 'prompt_begin' and 'prompt_end'.
+Specify:
+1. Spatial Layout: Where characters are standing (e.g., 'Dantes is foreground-left, looking towards the ship in the center-background').
+2. Acting: Detailed physical poses and expressions (e.g., 'Elara has a hand on her chest, eyes wide with fear').
+3. Environment: Specific lighting and atmospheric details from the prose.
 """
 
-    user_prompt = f"""{context}
-Scene: {current_scene.description}
-Location: {current_scene.location}
-Time of Day: {current_scene.time_of_day}
-Characters: {", ".join(current_scene.characters)}
-Scene ID: {current_scene.id}
-
-Convert this scene into a detailed shot list following the schema."""
-
     try:
-        shots_data = provider.generate_structured(
+        result = provider.generate_structured(
             prompt=user_prompt,
-            response_schema=SHOT_SCHEMA,
-            system_prompt=DIRECTOR_SYSTEM_PROMPT,
+            response_schema=SHOT_LIST_SCHEMA,
+            system_prompt=DIRECTOR_SYSTEM_PROMPT
         )
-        state["shot_list"] = [Shot(**s) for s in shots_data]
-        state["current_shot_index"] = 0
-    except Exception as e:
-        print(f"Error parsing Director response: {e}")
-        state["last_error"] = str(e)
+        
+        shots = result.get("shots", [])
+        for s in shots:
+            s["scene_id"] = scene["scene_id"]
+            if not s["shot_id"].startswith(scene["scene_id"]):
+                s["shot_id"] = f"{scene['scene_id']}_{s['shot_id']}"
+        
+        # Save to disk using systematic path
+        save_path = get_runtime_path(state, "shot_list.json")
+        save_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
-    return state
+        return {
+            "shot_list_ast": shots,
+            "current_shot_index": 0,
+            "image_retry_count": 0,
+            "video_retry_count": 0,
+            "physics_downgrade_required": False,
+            "video_qa_feedback": None
+        }
+    except Exception as e:
+        print(f"  [Director ERROR] {e}")
+        return {"last_error": str(e)}

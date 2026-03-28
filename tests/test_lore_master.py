@@ -1,44 +1,69 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.core.state import PipelineState
-from src.core.graph import lore_master
+from pathlib import Path
+from src.pipeline.state import PipelineState
+from src.agents.lore_master import lore_master
 
-@patch("src.agents.pre_production.ChatGoogleGenerativeAI")
-def test_lore_master_extracts_entities(mock_llm):
-    # Setup mock response
-    mock_instance = mock_llm.return_value
-    mock_response = MagicMock()
-    mock_response.content = """
-    ```json
-    {
-        "Alaric": {"type": "character", "description": "A brave hero"},
-        "Elara": {"type": "character", "description": "A wise healer"},
-        "Forest of Shadows": {"type": "location", "description": "A dark ancient forest"}
+def test_lore_master_extracts_mutations():
+    # Setup mock LLM provider
+    mock_provider = MagicMock()
+    mock_provider.generate_structured.return_value = {
+        "mutations": [
+            {
+                "entity": "Alaric",
+                "mutation": "Lost his shield",
+                "permanent": True
+            },
+            {
+                "entity": "Forest",
+                "mutation": "Turned dark",
+                "permanent": False
+            }
+        ]
     }
-    ```
-    """
-    mock_instance.invoke.return_value = mock_response
 
-    # Setup: Initial state with novel text
+    # Mock ChapterDB
+    mock_chapter = MagicMock()
+    mock_chapter.id = "chapter_001"
+    mock_chapter.text = "Alaric lost his shield in the dark forest."
+    
+    mock_db = MagicMock()
+    mock_db.get_all_chapters.return_value = [mock_chapter]
+
+    # Setup: Initial state
     initial_state: PipelineState = {
-        "novel_text": "Hero Alaric entered the ancient Forest of Shadows, holding his Silver Sword. Beside him stood the wise healer Elara.",
-        "current_chapter_id": "ch1",
-        "entity_graph": {},
-        "scenes": [],
+        "project_dir": "/tmp/test_project",
+        "style": "anime",
+        "config": {},
+        "novel_text": "...",
+        "current_chapter_id": "test",
+        "l3_graph_mutations": [],
+        "scene_ir_blocks": [],
         "current_scene_index": 0,
-        "shot_list": [],
+        "shot_list_ast": [],
         "current_shot_index": 0,
-        "retry_count": 0,
-        "last_error": None,
-        "approved_clips": []
+        "art_style_spec": None,
+        "current_keyframe_url": None,
+        "image_retry_count": 0,
+        "image_qa_feedback": None,
+        "current_video_candidate_url": None,
+        "video_retry_count": 0,
+        "video_qa_feedback": None,
+        "physics_downgrade_required": False,
+        "style_redefinition_required": False,
+        "approved_video_assets": [],
+        "final_video_path": None,
+        "last_error": None
     }
     
-    # Act: Run the lore_master node
-    new_state = lore_master(initial_state)
+    with patch("src.agents.lore_master.get_llm_provider", return_value=mock_provider), \
+         patch("src.agents.lore_master.get_chapter_db", return_value=mock_db), \
+         patch("src.agents.lore_master.get_runtime_path", return_value=Path("/tmp/test_project/runtime/lore/mutations.json")):
+        
+        # Act
+        new_state = lore_master(initial_state)
     
     # Assert
-    assert "Alaric" in new_state["entity_graph"]
-    assert "Elara" in new_state["entity_graph"]
-    assert "Forest of Shadows" in new_state["entity_graph"]
-    assert new_state["entity_graph"]["Alaric"].attributes["type"] == "character"
-    assert new_state["entity_graph"]["Forest of Shadows"].attributes["type"] == "location"
+    assert len(new_state["l3_graph_mutations"]) == 2
+    assert new_state["l3_graph_mutations"][0]["entity"] == "Alaric"
+    assert new_state["l3_graph_mutations"][1]["mutation"] == "Turned dark"

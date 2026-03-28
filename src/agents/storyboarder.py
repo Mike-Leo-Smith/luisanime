@@ -1,107 +1,87 @@
+import json
 from pathlib import Path
-from src.core.state import PipelineState
-from src.agents.utils import get_llm_provider, get_image_provider
-from src.providers.base import ImageGenerationConfig
-from src.agents.prompts import STORYBOARDER_SYSTEM_PROMPT
+from typing import Dict, List
+from src.pipeline.state import PipelineState
+from src.agents.utils import (
+    get_llm_provider,
+    get_image_provider, 
+    get_production_scene_path, 
+    get_production_shot_path,
+    get_runtime_path,
+    pack_images,
+    save_agent_metadata
+)
 
-
-def get_video_dimensions(config: dict) -> tuple[int, int]:
-    video_cfg = config.get("video", {})
-    resolution = video_cfg.get("resolution", "1080p")
-
-    resolution_map = {
-        "720p": (1280, 720),
-        "1080p": (1920, 1080),
-        "4k": (3840, 2160),
-        "1:1": (1024, 1024),
-        "16:9": (1920, 1080),
-        "9:16": (1080, 1920),
-    }
-
-    return resolution_map.get(resolution, (1920, 1080))
-
-
-def storyboarder(state: PipelineState) -> PipelineState:
+def storyboarder(state: PipelineState) -> Dict:
     idx = state["current_shot_index"]
-    shot = state["shot_list"][idx]
+    shot = state["shot_list_ast"][idx]
+    scene_id = shot["scene_id"]
+    shot_id = shot["shot_id"]
+    
+    print(f"🖼️ [Storyboarder] Generating Keyframe for Shot {shot_id}...")
+    
+    # 1. Gather Reference Images
+    style_dir = get_runtime_path(state, "style")
+    scene_art_dir = get_production_scene_path(state, scene_id, "art_style")
+    
+    ref_images = []
+    ref_descriptions = []
+    
+    env_ref = scene_art_dir / "ref_environment.png"
+    if env_ref.exists(): 
+        ref_images.append(env_ref)
+        ref_descriptions.append("Image 1: Scene Environment/Location Concept")
+    
+    char_refs = sorted(list(scene_art_dir.glob("ref_char_*.png")))
+    for i, cr in enumerate(char_refs[:2]):
+        ref_images.append(cr)
+        ref_descriptions.append(f"Image {len(ref_images)}: Character Reference ({cr.stem.replace('ref_char_', '')})")
+    
+    master_refs = sorted(list(style_dir.glob("master_char_*.png")))
+    for mr in master_refs:
+        if mr not in ref_images and len(ref_images) < 4:
+            ref_images.append(mr)
+            ref_descriptions.append(f"Image {len(ref_images)}: Master Design ({mr.stem.replace('master_char_', '')})")
 
-    print(f"--- STORYBOARDER: Generating Keyframes for Shot {shot.id} ---")
+    shot_path = get_production_shot_path(state, scene_id, shot_id)
+    image_gen = get_image_provider(state, "storyboarder")
+    prompt_architect = get_llm_provider(state, "image_qa") 
 
-    project_dir = state.get("project_dir", "./workspace")
+    ref_key = "\n".join(ref_descriptions)
+    architect_system = """You are a Senior Cinematic Prompt Engineer. 
+RULES:
+1. SPATIAL REASONING: Define character positions (foreground, background, left, right).
+2. ACTING: Specify poses and expressions based on novel prose.
+3. GRID INDEXING: Refer to Reference Key (e.g., 'Match character Image 2').
+4. STYLE: Force a cinematic video frame anime aesthetic. NO comic panels, grids, or text.
+5. LANGUAGE: Prompt must be in ENGLISH. Keep proper names in original language."""
+
+    negative_prompt = "photorealistic, realistic, 3d render, comic panels, grid, text, watermark, signature, blurry, low quality, distorted characters, extra limbs, speech bubbles, multiple views."
 
     try:
-        config = state.get("config")
-        if config:
-            models = config.get("models", {})
-            agent_cfg = config.get("agents", {}).get("storyboarder", {})
-            llm_model_name = agent_cfg.get("model")
-            image_model_name = agent_cfg.get("image_model")
+        # --- Generate SINGLE BEGIN frame ---
+        img_begin = shot_path / "keyframe_begin.png"
+        
+        print("  Architecting prompt...")
+        packed_ref = shot_path / "packed_references.png"
+        pack_images(ref_images, packed_ref)
+        
+        qa_note = f"Previous QA Feedback: {state.get('image_qa_feedback')}" if state.get('image_qa_feedback') else ""
+        arch_prompt = f"Novel Prose: {shot.get('source_prose', 'N/A')}\nScene Action: {shot['visual_payload']['prompt_begin']}\nReference Key:\n{ref_key}\n{qa_note}\nCompose a cinematic prompt."
+        
+        final_prompt = prompt_architect.generate_text(arch_prompt, system_prompt=architect_system).text
+        
+        print("  Generating keyframe...")
+        resp = image_gen.generate_image(f"SUBJECT REFERENCE: {final_prompt}. NEGATIVE: {negative_prompt}", reference_media=str(packed_ref))
+        img_begin.write_bytes(resp.image_bytes)
+        
+        save_agent_metadata(shot_path / "metadata_begin.json", {"architect_prompt": final_prompt})
 
-            if llm_model_name and image_model_name:
-                from src.providers.factory import ProviderFactory
-
-                llm_cfg = models.get(llm_model_name, {})
-                image_cfg = models.get(image_model_name, {})
-                llm = ProviderFactory.create_llm(llm_cfg)
-                image_gen = ProviderFactory.create_image(image_cfg)
-            else:
-                llm = get_llm_provider(state, "director")
-                image_gen = get_image_provider(state, "storyboarder")
-        else:
-            llm = get_llm_provider(state, "director")
-            image_gen = get_image_provider(state, "storyboarder")
-
-        shot_dir = Path(project_dir) / "scenes" / shot.scene_id / "shots" / shot.id
-        shot_dir.mkdir(parents=True, exist_ok=True)
-
-        optimization_prompt = f"""{STORYBOARDER_SYSTEM_PROMPT}
-
-Director's visual description:
-{shot.prompt}
-
-Camera: {shot.camera_movement}
-Duration: {shot.duration}s
-Style: {state.get("style", "anime")}
-
-Optimize this into a dense, high-quality image generation prompt."""
-
-        print("  Optimizing prompt...")
-        optimized_response = llm.generate_text(optimization_prompt)
-        optimized_prompt = optimized_response.text.strip()
-        print(f"  Optimized: {optimized_prompt[:80]}...")
-
-        state["shot_list"][idx].optimized_prompt = optimized_prompt
-
-        width, height = get_video_dimensions(config) if config else (1920, 1080)
-        print(f"  Using video dimensions: {width}x{height}")
-        gen_config = ImageGenerationConfig(width=width, height=height, num_images=1)
-
-        print("  Generating begin keyframe...")
-        response_begin = image_gen.generate_image(optimized_prompt, gen_config)
-        filepath_begin = shot_dir / "keyframe_begin.png"
-        filepath_begin.write_bytes(response_begin.image_bytes)
-        state["shot_list"][idx].keyframe_begin_url = str(filepath_begin)
-        print(f"  Saved begin keyframe: {filepath_begin}")
-
-        end_frame_prompt = (
-            f"{optimized_prompt}, end of motion, final pose, same character and scene"
-        )
-        print("  Generating end keyframe using I2I...")
-        gen_config_end = ImageGenerationConfig(
-            width=width,
-            height=height,
-            num_images=1,
-            reference_image=str(filepath_begin),
-        )
-        response_end = image_gen.generate_image(end_frame_prompt, gen_config_end)
-        filepath_end = shot_dir / "keyframe_end.png"
-        filepath_end.write_bytes(response_end.image_bytes)
-        state["shot_list"][idx].keyframe_end_url = str(filepath_end)
-        print(f"  Saved end keyframe: {filepath_end}")
-
-        state["shot_list"][idx].status = "storyboarded"
+        return {
+            "current_keyframe_url": str(img_begin),
+            "image_qa_feedback": None,
+            "failed_frames": []
+        }
     except Exception as e:
-        print(f"Error in storyboarder: {e}")
-        state["last_error"] = str(e)
-
-    return state
+        print(f"  [Storyboarder ERROR] {e}")
+        return {"last_error": str(e)}

@@ -2,19 +2,22 @@ import pytest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 from src.pipeline.state import PipelineState
-from src.agents.animator import animator
+from src.agents.video_qa import video_qa_node
 
-def test_animator_generates_video():
-    # Setup mock Video provider
-    mock_video_provider = MagicMock()
-    mock_video_provider.generate_video.return_value = MagicMock(video_bytes=b"fake_video_bytes")
+def test_video_qa_pass():
+    # Setup mock LLM provider
+    mock_provider = MagicMock()
+    mock_provider.generate_structured.return_value = {
+        "is_pass": True,
+        "reasoning": "The video is smooth and accurate.",
+        "failure_details": None
+    }
 
     # Setup: Initial state
     shot = {
         "shot_id": "shot_1",
         "scene_id": "scene_1",
         "visual_payload": {"prompt": "A man in the forest"},
-        "camera_payload": {"movement": "static"},
         "qa_checklist": []
     }
     
@@ -33,7 +36,7 @@ def test_animator_generates_video():
         "current_keyframe_url": "/tmp/test_project/production/scene_1/shot_1/keyframe_begin.png",
         "image_retry_count": 0,
         "image_qa_feedback": None,
-        "current_video_candidate_url": None,
+        "current_video_candidate_url": "/tmp/test_project/production/scene_1/shot_1/video.mp4",
         "video_retry_count": 0,
         "video_qa_feedback": None,
         "physics_downgrade_required": False,
@@ -43,16 +46,14 @@ def test_animator_generates_video():
         "last_error": None
     }
     
-    # Mocking paths and utilities
-    with patch("src.agents.animator.get_video_provider", return_value=mock_video_provider), \
-         patch("src.agents.animator.get_production_shot_path", side_effect=lambda state, sid, shid, *args: Path(f"/tmp/test_project/production/{sid}/{shid}").joinpath(*args) if args else Path(f"/tmp/test_project/production/{sid}/{shid}")), \
-         patch("pathlib.Path.read_bytes", return_value=b"fake_keyframe_bytes"), \
-         patch("pathlib.Path.write_bytes"):
+    with patch("src.agents.video_qa.get_llm_provider", return_value=mock_provider), \
+         patch("src.agents.video_qa.get_production_shot_path", return_value=Path("/tmp/test_project/production/scene_1/shot_1")), \
+         patch("src.agents.video_qa.save_agent_metadata"):
         
         # Act
-        new_state = animator(initial_state)
+        new_state = video_qa_node(initial_state)
     
     # Assert
-    assert "current_video_candidate_url" in new_state
-    assert new_state["current_video_candidate_url"] == "/tmp/test_project/production/scene_1/shot_1/video.mp4"
-    assert mock_video_provider.generate_video.called
+    assert new_state["video_qa_feedback"] is None
+    assert len(new_state["approved_video_assets"]) == 1
+    assert new_state["approved_video_assets"][0] == "/tmp/test_project/production/scene_1/shot_1/video.mp4"
