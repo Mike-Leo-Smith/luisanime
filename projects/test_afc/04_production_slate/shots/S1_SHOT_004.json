@@ -1,0 +1,17 @@
+{
+    "shot_id": "S1_SHOT_004",
+    "target_duration_ms": 7000,
+    "camera_movement": "Pan Right",
+    "detailed_camera_plan": "Follow Qin Ying as he moves from the mirror to the wardrobe area.",
+    "action_description": "Qin Ying changes into a dark grey suit.",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "Bedroom changing area with wardrobe open.",
+    "character_poses": {
+        "秦嬴": "Donning a dark grey suit jacket, adjusting the lapels."
+    },
+    "setting_details": "秦氏庄园, bedroom.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Qin Ying fully dressed in a dark grey suit, standing by the bedroom door."
+}

@@ -4,135 +4,74 @@ project:
   version: "1.0.0"
 
 video:
-  style: "anime"
+  style: "cinematic"
   resolution: "1080p"
   fps: 24
-  duration_per_shot: 4.0
-  max_shots: 10
   aspect_ratio: "16:9"
 
 generation:
+  project_budget_usd: 100.0
   max_retries_per_shot: 3
-  candidates_per_take: 1
-  qa_threshold: 0.8
-  skip_lip_sync: false
   enable_vlm_qa: true
-  save_intermediates: true
 
-  # Segment selection - specify which parts of the novel to animate
-  segment_selection:
-    # chapters: [1, 2, 3]
-    # natural_language:
-    #   - "the wedding scene featuring Edmond and Mercedes"
-
-# Model definitions - reusable across agents
+# Model definitions
 models:
-  # Gemini Flash for fast/cheap LLM tasks
   gemini-flash:
     provider: "gemini"
     model: "gemini-3.1-flash-lite-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
-    max_tokens: 128000
 
-  # Gemini Pro for reasoning-heavy tasks
   gemini-pro:
     provider: "gemini"
     model: "gemini-3.1-pro-preview"
     api_key: "ENV:GEMINI_PRO_API_KEY"
     temperature: 0.2
-    max_tokens: 128000
 
-  # MiniMax for image generation
-  minimax-image:
-    provider: "minimax"
-    model: "image-01"
-    api_key: "ENV:MINIMAX_IMAGE_API_KEY"
-    width: 1024
-    height: 1024
+  gemini-image:
+    provider: "gemini"
+    model: "nano-banana-pro-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
 
-  # MiniMax for video generation
   minimax-video:
-    provider: "minimax"
-    model: "MiniMax-Hailuo-02"
-    api_key: "ENV:MINIMAX_VIDEO_API_KEY"
-    duration: 6
-    resolution: "1080p"
-
-  MiniMax-Hailuo-2.3:
     provider: "minimax"
     model: "MiniMax-Hailuo-2.3"
     api_key: "ENV:MINIMAX_VIDEO_API_KEY"
-    duration: 6
-    resolution: "1080p"
-
-  # Gemini for image generation (Nano Banana 2)
-  gemini-image:
-    provider: "gemini"
-    model: "gemini-3.1-flash-image-preview"
-    api_key: "ENV:GEMINI_FLASH_API_KEY"
 
 # Per-agent configurations
-# Each agent references a model and can override parameters
 agents:
-  indexer:
-    model: gemini-flash
-
-  lore_master:
-    model: gemini-flash
-
+  showrunner:
+    llm: gemini-flash
   screenwriter:
-    model: gemini-flash
-    temperature: 0.3
-
+    llm: gemini-flash
+  production_designer:
+    llm: gemini-flash
+    image: gemini-image
   director:
-    model: gemini-flash
-
-  storyboarder:
-    model: gemini-image
-
-  animator:
-    model: MiniMax-Hailuo-2.3
-
-  image_qa:
-    model: gemini-pro
-    temperature: 0.0  # Deterministic for QA
-
-  video_qa:
-    model: gemini-pro
-    temperature: 0.0  # Deterministic for QA
-
-  lip_sync:
-    engine: "local_musetalk"
-    device: "cuda:0"
-
-  compositor:
-    ffmpeg_preset: "slow"
-    codec: "libx264"
-    crf: 18
+    llm: gemini-flash
+  script_coordinator:
+    llm: gemini-flash
+  previs_artist:
+    llm: gemini-flash
+    video: minimax-video
+    # Budget saving settings
+    resolution: "360p"
+    fps: 8
+  cinematographer:
+    llm: gemini-flash
+    image: gemini-image
+  lead_animator:
+    llm: gemini-flash
+    video: minimax-video
+  continuity_supervisor:
+    llm: gemini-pro
+  editor:
+    llm: gemini-flash
 
 style_presets:
   anime:
-    prompt_prefix: "High-quality 3D anime style."
-    prompt_suffix: "Studio Ghibli inspired, vibrant colors, clean lines, soft lighting."
-
+    prompt_prefix: "Studio Ghibli 2D manga style, hand-drawn aesthetic, high-quality traditional animation."
+    prompt_suffix: "Vibrant but natural colors, lush painterly backgrounds, soft cinematic lighting, clean line art, nostalgic atmosphere, whimsical details, Joe Hisaishi movie vibe, 2D cell shaded."
   cinematic:
-    prompt_prefix: "Cinematic live-action style."
-    prompt_suffix: "Dramatic lighting, film grain, 35mm aesthetic, professional color grading."
-
-  realistic:
-    prompt_prefix: "Photorealistic style."
-    prompt_suffix: "Hyper-detailed, 8K resolution, realistic textures, natural lighting."
-
-  cyberpunk:
-    prompt_prefix: "Cyberpunk anime style."
-    prompt_suffix: "Neon lights, rain-soaked streets, futuristic cityscape, dark atmosphere."
-
-memory:
-  type: "local"
-  checkpoint_interval: 1
-
-logging:
-  level: "INFO"
-  save_prompts: true
-  save_api_responses: false
+    prompt_prefix: "Cinematic 35mm film style, photorealistic, highly detailed."
+    prompt_suffix: "Dramatic lighting, deep shadows, rich textures, professional color grading, anamorphic lens flares, slight film grain, epic composition."

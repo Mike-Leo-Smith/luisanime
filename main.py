@@ -3,7 +3,7 @@ import sys
 import argparse
 from pathlib import Path
 from src.pipeline.project import ProjectManager
-from src.pipeline.state import PipelineState
+from src.pipeline.state import AFCState, FinancialLedger
 from src.pipeline.graph import app as pipeline_app
 
 def create_project(args):
@@ -25,38 +25,28 @@ def create_project(args):
     project_path = pm.create_project(args.name, novel_text, config)
     print(f"Created project: {project_path}")
 
-def _get_initial_state(args, pm):
+def _get_initial_state(args, pm) -> AFCState:
     pm.load_project(args.name)
-    novel_text = (pm.current_project / "novel.txt").read_text(encoding="utf-8")
+    novel_text = (pm.current_project / "01_source_material" / "novel.txt").read_text(encoding="utf-8")
     
-    # Map stage names to internal state if needed
-    start_scene = 0
-    start_shot = getattr(args, 'shot_index', 0)
-
-    return PipelineState(
-        project_dir=str(pm.current_project),
-        style=pm.project_config["video"]["style"],
-        config=pm.project_config,
+    return AFCState(
+        workspace_root=str(pm.current_project),
+        project_config=pm.project_config,
         novel_text=novel_text,
-        current_chapter_id=args.name,
-        l3_graph_mutations=[],
-        scene_ir_blocks=[],
-        current_scene_index=start_scene,
-        shot_list_ast=[],
-        current_shot_index=start_shot,
-        art_style_spec=None,
-        master_art_spec=None,
-        current_keyframe_url=None,
-        image_retry_count=0,
-        image_qa_feedback=None,
-        current_video_candidate_url=None,
-        video_retry_count=0,
-        video_qa_feedback=None,
-        physics_downgrade_required=False,
-        style_redefinition_required=False,
-        approved_video_assets=[],
-        final_video_path=None,
-        last_error=None
+        ledger=FinancialLedger(project_budget_usd=100.0, accumulated_cost_usd=0.0),
+        unprocessed_scenes=[],
+        current_scene_path=None,
+        unprocessed_shots=[],
+        active_shot_plan=None,
+        current_proxy_path=None,
+        current_keyframe_path=None,
+        current_render_path=None,
+        scene_dailies_paths=[],
+        completed_scenes_paths=[],
+        previs_retry_count=0,
+        render_retry_count=0,
+        continuity_feedback=None,
+        escalation_required=False
     )
 
 def run_pipeline(args):

@@ -17,6 +17,7 @@ class ImageGenerationConfig(GenerationConfig):
     num_images: int = 1
     seed: Optional[int] = None
     reference_image: Optional[bytes] = None
+    reference_media: Optional[List[str]] = None
 
 
 @dataclass
@@ -26,6 +27,7 @@ class VideoGenerationConfig(GenerationConfig):
     resolution: str = "1080p"
     first_frame: Optional[bytes] = None
     last_frame: Optional[bytes] = None
+    control_video_path: Optional[str] = None
 
 
 @dataclass

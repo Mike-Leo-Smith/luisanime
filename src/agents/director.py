@@ -1,69 +1,135 @@
-from typing import Dict, Any
-from pathlib import Path
+from typing import Dict, Any, List, Optional
 import json
-from src.pipeline.state import PipelineState
-from src.schemas import SHOT_LIST_SCHEMA
-from src.agents.utils import get_llm_provider, get_runtime_path
-from src.agents.prompts import DIRECTOR_SYSTEM_PROMPT
+from src.agents.base import BaseCreative
+from src.pipeline.state import AFCState, ShotExecutionPlan
+from src.agents.prompts import DIRECTOR_PROMPT
 
-def director(state: PipelineState) -> Dict:
-    print("🎬 [Director] Resolving spatial constraints...")
-    
-    # Bypass removed to allow schema update (prompt_begin/end)
-    # save_path = get_runtime_path(state, "shot_list.json")
-    
-    scenes = state.get("scene_ir_blocks", [])
-    if not scenes:
-        print("  Error: No scene IR blocks found.")
-        return {"last_error": "No scene IR blocks"}
+# Expanded schema for Director to include continuity linkage
+SHOT_LIST_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "shots": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "shot_id": {"type": "STRING"},
+                    "target_duration_ms": {"type": "INTEGER"},
+                    "camera_movement": {"type": "STRING"},
+                    "detailed_camera_plan": {"type": "STRING"},
+                    "action_description": {"type": "STRING"},
+                    "active_entities": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    },
+                    "staging_description": {"type": "STRING"},
+                    "character_poses": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "entity_id": {"type": "STRING"},
+                                "pose": {"type": "STRING"}
+                            },
+                            "required": ["entity_id", "pose"]
+                        }
+                    },
+                    "setting_details": {"type": "STRING"},
+                    "era_context": {"type": "STRING"},
+                    "ending_composition_description": {"type": "STRING"}
+                },
+                "required": [
+                    "shot_id", "target_duration_ms", "camera_movement", "detailed_camera_plan",
+                    "action_description", "active_entities", 
+                    "staging_description", "character_poses", "setting_details", "era_context",
+                    "ending_composition_description"
+                ]
+            }
+        }
+    },
+    "required": ["shots"]
+}
 
-    idx = state.get("current_scene_index", 0)
-    scene = scenes[idx]
-    provider = get_llm_provider(state, "director")
-    
-    fallback_instruction = ""
-    if state.get("physics_downgrade_required"):
-        fallback_instruction = """🚨 FALLBACK TRIGGERED: MANDATORY DEGRADATION."""
-
-    user_prompt = f"""{fallback_instruction}
-Original Prose: {scene.get('source_prose', 'N/A')}
-Scene IR: {scene}
-L3 Entity Graph: {state.get('l3_graph_mutations', [])}
-Master Art Style: {state.get('master_art_spec', {})}
-
-Generate a detailed shot list. 
-For each shot, provide high-detail 'prompt_begin' and 'prompt_end'.
-Specify:
-1. Spatial Layout: Where characters are standing (e.g., 'Dantes is foreground-left, looking towards the ship in the center-background').
-2. Acting: Detailed physical poses and expressions (e.g., 'Elara has a hand on her chest, eyes wide with fear').
-3. Environment: Specific lighting and atmospheric details from the prose.
-"""
-
-    try:
-        result = provider.generate_structured(
-            prompt=user_prompt,
+class DirectorAgent(BaseCreative):
+    def parse_scene_json(self, scene_path: str) -> Dict:
+        """Ingests the screenwriter's output."""
+        print(f"🎬 [Director] Parsing scene: {scene_path}")
+        return self.workspace.read_json(scene_path)
+        
+    def write_shot_plan(self, scene_data: Dict) -> List[ShotExecutionPlan]:
+        """Outputs an array of rigid technical shot constraints with cinematic continuity."""
+        scene_id = scene_data.get('scene_id', '1')
+        print(f"🎬 [Director] Generating continuous shot plans for scene: {scene_id}")
+        
+        prompt = f"""Based on the following Scene JSON, generate a sequence of technical ShotExecutionPlan JSONs.
+        
+        CRITICAL CONTINUITY RULE:
+        The sequence must be SEAMLESS. The 'staging_description' and 'character_poses' at the START of Shot N must exactly match the 'ending_composition_description' of Shot N-1.
+        Avoid 'jumps' between shots unless explicitly noted as a cut. Prefer match cuts or continuous motion.
+        
+        STRICT RULES:
+        1. Keep character names, locations, and IDs in the ORIGINAL LANGUAGE (Chinese).
+        2. Era Context: Precisely determine the specific historical era or setting.
+        3. Detailed Camera Plan: Specific movement from a defined START composition to a defined END composition.
+        4. Staging: Specific environmental layout and character positioning.
+        5. Character Poses: Vividly describe the pose and facial expression.
+        6. Ending Composition: Describe the EXACT visual state at the final millisecond of this shot.
+        
+        Use deterministic shot IDs: 'S{scene_id}_SHOT_001', 'S{scene_id}_SHOT_002', etc.
+        
+        Scene Data:
+        {json.dumps(scene_data, indent=2, ensure_ascii=False)}
+        """
+        
+        response = self.llm.generate_structured(
+            prompt=prompt,
             response_schema=SHOT_LIST_SCHEMA,
-            system_prompt=DIRECTOR_SYSTEM_PROMPT
+            system_prompt=DIRECTOR_PROMPT
         )
         
-        shots = result.get("shots", [])
-        for s in shots:
-            s["scene_id"] = scene["scene_id"]
-            if not s["shot_id"].startswith(scene["scene_id"]):
-                s["shot_id"] = f"{scene['scene_id']}_{s['shot_id']}"
-        
-        # Save to disk using systematic path
-        save_path = get_runtime_path(state, "shot_list.json")
-        save_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+        shots = []
+        for shot_data in response.get("shots", []):
+            # Enforce the 'S' prefix if the LLM missed it
+            if not shot_data["shot_id"].startswith("S"):
+                shot_data["shot_id"] = f"S{shot_data['shot_id']}"
 
-        return {
-            "shot_list_ast": shots,
-            "current_shot_index": 0,
-            "image_retry_count": 0,
-            "video_retry_count": 0,
-            "physics_downgrade_required": False,
-            "video_qa_feedback": None
-        }
-    except Exception as e:
-        print(f"  [Director ERROR] {e}")
-        return {"last_error": str(e)}
+            # Convert list of poses back to dict
+            poses_list = shot_data.get("character_poses", [])
+            poses_dict = {p["entity_id"]: p["pose"] for p in poses_list}
+            shot_data["character_poses"] = poses_dict
+            
+            shot = ShotExecutionPlan(**shot_data)
+            shots.append(shot)
+            
+            # Save EACH shot to its own file
+            shot_file = f"04_production_slate/shots/{shot.shot_id}.json"
+            self.workspace.write_json(shot_file, shot_data)
+            
+        print(f"🎬 [Director] Created {len(shots)} continuous shots. Saved individually.")
+        return shots
+
+def director_node(state: AFCState) -> Dict:
+    from src.pipeline.workspace import AgenticWorkspace
+    ws = AgenticWorkspace(state["workspace_root"])
+    agent = DirectorAgent.from_config(ws, state["project_config"])
+    
+    current_scene_path = state.get("current_scene_path")
+    if not current_scene_path:
+        if state.get("unprocessed_scenes"):
+            current_scene_path = state["unprocessed_scenes"][0]
+        else:
+            return {"escalation_required": True}
+            
+    scene_data = agent.parse_scene_json(current_scene_path)
+    shots = agent.write_shot_plan(scene_data)
+    
+    unprocessed_scenes = state.get("unprocessed_scenes", [])
+    if current_scene_path in unprocessed_scenes:
+        unprocessed_scenes.remove(current_scene_path)
+    
+    return {
+        "current_scene_path": current_scene_path,
+        "unprocessed_scenes": unprocessed_scenes,
+        "unprocessed_shots": shots,
+        "escalation_required": False
+    }

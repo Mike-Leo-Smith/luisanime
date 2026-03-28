@@ -1,0 +1,17 @@
+{
+    "shot_id": "S1_SHOT_003",
+    "target_duration_ms": 4000,
+    "camera_movement": "Dolly Back",
+    "detailed_camera_plan": "Dolly back from the watch to a waist-up shot of Qin Ying.",
+    "action_description": "Qin Ying takes a deep breath to calm down and then looks into a wall mirror.",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "Qin Ying standing in front of a floor-to-ceiling mirror.",
+    "character_poses": {
+        "秦嬴": "Standing straight, chest expanding with a deep breath, eyes looking into the mirror reflection."
+    },
+    "setting_details": "秦氏庄园, bedroom dressing area.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Qin Ying reflected in the mirror, looking composed."
+}

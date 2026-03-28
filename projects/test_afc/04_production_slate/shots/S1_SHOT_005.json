@@ -1,0 +1,17 @@
+{
+    "shot_id": "S1_SHOT_005",
+    "target_duration_ms": 5000,
+    "camera_movement": "Handheld Tracking",
+    "detailed_camera_plan": "Follow Qin Ying as he exits the room and pauses at the threshold.",
+    "action_description": "Qin Ying walks out of the bedroom and feels the scorching heat of the July air.",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "Threshold between bedroom and exterior balcony/hallway.",
+    "character_poses": {
+        "秦嬴": "Stepping forward, squinting eyes against the heat, hand shielding brow."
+    },
+    "setting_details": "秦氏庄园, outdoor corridor.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Qin Ying standing at the doorway, looking back into the cool room."
+}

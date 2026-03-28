@@ -1,0 +1,19 @@
+{
+    "shot_id": "S2_SHOT_004",
+    "target_duration_ms": 7000,
+    "camera_movement": "Static Medium",
+    "detailed_camera_plan": "Lock-off shot focusing on the interaction between the two characters across the table.",
+    "action_description": "秦嬴向秦悍表达学习商业管理与科技专业的意愿，语气坚定。",
+    "active_entities": [
+        "秦嬴",
+        "秦悍"
+    ],
+    "staging_description": "餐桌两侧，秦嬴正视秦悍，双手放在桌上。",
+    "character_poses": {
+        "秦嬴": "leaning slightly forward, earnest expression",
+        "秦悍": "listening intently, slight smile forming"
+    },
+    "setting_details": "Warm lighting, intimate dining atmosphere.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "秦嬴面带恳切，秦悍点头示意，两人目光交汇。"
+}

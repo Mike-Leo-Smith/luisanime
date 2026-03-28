@@ -1,0 +1,17 @@
+{
+    "shot_id": "S1_SHOT_001",
+    "target_duration_ms": 5000,
+    "camera_movement": "Static Medium Close-Up",
+    "detailed_camera_plan": "Start on Qin Ying's face in bed, end with slight focus shift to left wrist.",
+    "action_description": "Qin Ying wakes up in his bedroom and observes the black metal watch on his wrist.",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "Bedroom, Qin Ying lying in center-frame on a bed.",
+    "character_poses": {
+        "秦嬴": "Lying supine, eyes opening slowly, left arm raised to eye level."
+    },
+    "setting_details": "秦氏庄园, modern luxury bedroom, morning sunlight.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Extreme close-up on the black metal watch on Qin Ying's wrist."
+}

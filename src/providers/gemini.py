@@ -1,6 +1,7 @@
 import json
 import base64
 import time
+import hashlib
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from google import genai
@@ -25,13 +26,46 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         self.api_key = api_key
         self.model = model
         self.image_model = image_model or "gemini-3.1-flash-image-preview"
-        # Using v1alpha for experimental multimodal features
+        # Using v1beta for experimental multimodal features
         self.client = genai.Client(
-            api_key=api_key, http_options={"api_version": "v1alpha"}
+            api_key=api_key, http_options={"api_version": "v1beta"}
         )
+        self._upload_cache: Dict[str, Any] = {}
+
+    def _with_retry(self, func, *args, **kwargs):
+        """Generic retry wrapper for Gemini API calls."""
+        max_retries = 3
+        for i in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                err_str = str(e)
+                if any(x in err_str for x in ["RemoteProtocolError", "Server disconnected", "500", "502", "503", "504"]):
+                    if i < max_retries - 1:
+                        wait = (i + 1) * 2
+                        print(f"  [GeminiProvider] Transient error: {e}. Retrying in {wait}s...")
+                        time.sleep(wait)
+                        continue
+                raise e
 
     def _upload_media(self, media_path: str) -> Any:
         path = Path(media_path)
+        
+        # Calculate hash for cache key
+        file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        
+        # Check cache
+        if file_hash in self._upload_cache:
+            file = self._upload_cache[file_hash]
+            try:
+                # Verify file still exists on server
+                file = self.client.files.get(name=file.name)
+                if file.state.name == "ACTIVE":
+                    print(f"  [GeminiProvider] Using cached file: {file.name} for {path.name} (hash match)")
+                    return file
+            except:
+                pass
+
         mime_type = "image/png"
         if path.suffix.lower() in [".mp4", ".mpeg", ".mov", ".avi"]:
             mime_type = "video/mp4"
@@ -52,6 +86,7 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
                 raise ValueError(f"File processing failed: {file.name}")
             print(f"  [GeminiProvider] File {file.name} is ACTIVE.")
         
+        self._upload_cache[file_hash] = file
         return file
 
     def generate_text(
@@ -61,7 +96,9 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         config: Optional[GenerationConfig] = None,
     ) -> LLMResponse:
         config = config or GenerationConfig()
-        response = self.client.models.generate_content(
+        
+        response = self._with_retry(
+            self.client.models.generate_content,
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -88,20 +125,37 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         contents = []
         if media_path:
             file = self._upload_media(media_path)
-            contents.append(file)
+            contents.append(types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type))
         
-        contents.append(prompt)
+        contents.append(types.Part.from_text(text=prompt))
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=contents,
-            config=types.GenerateContentConfig(
+        if media_path:
+            gen_config = types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
+                temperature=config.temperature,
+            )
+        else:
+            gen_config = types.GenerateContentConfig(
                 system_instruction=system_prompt if system_prompt else None,
                 temperature=config.temperature,
                 response_mime_type="application/json",
-            ),
+            )
+
+        response = self._with_retry(
+            self.client.models.generate_content,
+            model=self.model,
+            contents=contents,
+            config=gen_config,
         )
-        return json.loads(response.text or "{}")
+        
+        text = response.text or "{}"
+        if media_path and not text.startswith("{"):
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+                
+        return json.loads(text)
 
     def generate_structured(
         self,
@@ -118,21 +172,38 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             paths = [media_path] if isinstance(media_path, str) else media_path
             for p in paths:
                 file = self._upload_media(p)
-                contents.append(file)
+                contents.append(types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type))
         
-        contents.append(prompt)
+        contents.append(types.Part.from_text(text=prompt))
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=contents,
-            config=types.GenerateContentConfig(
+        if media_path:
+            gen_config = types.GenerateContentConfig(
+                system_instruction=system_prompt if system_prompt else None,
+                temperature=config.temperature,
+            )
+        else:
+            gen_config = types.GenerateContentConfig(
                 system_instruction=system_prompt if system_prompt else None,
                 temperature=config.temperature,
                 response_mime_type="application/json",
                 response_schema=response_schema,
-            ),
+            )
+
+        response = self._with_retry(
+            self.client.models.generate_content,
+            model=self.model,
+            contents=contents,
+            config=gen_config,
         )
-        return json.loads(response.text or "{}")
+        
+        text = response.text or "{}"
+        if media_path:
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+        
+        return json.loads(text)
 
     def generate_image(
         self, 
@@ -140,21 +211,21 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         config: Optional[ImageGenerationConfig] = None,
         reference_media: Optional[Union[str, List[str]]] = None
     ) -> ImageResponse:
-        """
-        Multimodal image generation. 
-        Supports providing reference images/video in the content stream.
-        """
         contents = []
+        if reference_media is None and config and config.reference_media:
+            reference_media = config.reference_media
+            
         if reference_media:
             paths = [reference_media] if isinstance(reference_media, str) else reference_media
             for p in paths:
                 file = self._upload_media(p)
-                contents.append(file)
+                contents.append(types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type))
         
-        contents.append(prompt)
+        contents.append(types.Part.from_text(text=prompt))
 
         print(f"  [GeminiProvider] Generating image with {self.image_model}...")
-        response = self.client.models.generate_content(
+        response = self._with_retry(
+            self.client.models.generate_content,
             model=self.image_model,
             contents=contents,
             config=types.GenerateContentConfig(
@@ -177,9 +248,15 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
         file = self._upload_media(image_path)
-        response = self.client.models.generate_content(
+        contents = [
+            types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type), 
+            types.Part.from_text(text=prompt)
+        ]
+        
+        response = self._with_retry(
+            self.client.models.generate_content,
             model=self.model,
-            contents=[file, prompt],
+            contents=contents,
         )
         return LLMResponse(text=response.text or "", usage={}, model=self.model)
 

@@ -134,10 +134,18 @@ Respond with valid JSON only."""
         config = config or ImageGenerationConfig()
 
         url = f"{self.base_url}/image_generation"
+        
+        # Map dimensions to MiniMax supported aspect ratios
+        ratio = "1:1"
+        if config.width > config.height:
+            ratio = "16:9"
+        elif config.height > config.width:
+            ratio = "9:16"
+
         payload = {
             "model": self.image_model,
             "prompt": prompt,
-            "aspect_ratio": "1:1",
+            "aspect_ratio": ratio,
             "response_format": "url",
             "n": config.num_images,
         }
@@ -145,16 +153,25 @@ Respond with valid JSON only."""
         if config.seed is not None:
             payload["seed"] = config.seed
 
-        if config.reference_image:
+        if config.reference_image or config.reference_media:
             import base64
-
-            image_data = base64.b64encode(config.reference_image).decode("utf-8")
-            payload["subject_reference"] = [
-                {
+            payload["subject_reference"] = []
+            
+            if config.reference_image:
+                image_data = base64.b64encode(config.reference_image).decode("utf-8")
+                payload["subject_reference"].append({
                     "type": "character",
                     "image_file": f"data:image/png;base64,{image_data}",
-                }
-            ]
+                })
+            
+            if config.reference_media:
+                for path in config.reference_media:
+                    with open(path, "rb") as f:
+                        image_data = base64.b64encode(f.read()).decode("utf-8")
+                        payload["subject_reference"].append({
+                            "type": "character", # Default to character for now
+                            "image_file": f"data:image/png;base64,{image_data}",
+                        })
 
         response = requests.post(url, headers=self.headers, json=payload)
         response.raise_for_status()
@@ -271,7 +288,8 @@ Respond with valid JSON only."""
                 file_id = data.get("file_id")
                 return self._get_download_url(file_id)
             elif status == "fail":
-                raise Exception(f"Video generation failed: {data.get('error_msg')}")
+                print(f"  [MiniMax] Task {task_id} failed. Full response: {data}")
+                raise Exception(f"Video generation failed: {data.get('error_msg') or 'Unknown MiniMax error'}")
 
             time.sleep(10)
 

@@ -1,0 +1,17 @@
+{
+    "shot_id": "S2_SHOT_001",
+    "target_duration_ms": 6000,
+    "camera_movement": "Dolly In",
+    "detailed_camera_plan": "Start with a wide shot of the stairs, tracking 秦嬴 as he descends. Camera moves from a full body view to a medium shot as he enters the dining room.",
+    "action_description": "秦嬴下楼进入餐厅，动作沉稳，目光扫视四周。",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "秦氏庄园餐厅内部，光线明亮，秦嬴从楼梯口步入餐厅区域。",
+    "character_poses": {
+        "秦嬴": "standing upright, walking forward with a purposeful gait"
+    },
+    "setting_details": "Modern luxury villa dining room, 2013 interior design, marble flooring.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "秦嬴站在餐厅中央，身体微转，视线向上看向天花板角落。"
+}

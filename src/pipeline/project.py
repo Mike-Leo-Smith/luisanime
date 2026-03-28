@@ -21,16 +21,18 @@ class ProjectManager:
         
         project_path.mkdir(parents=True)
         
-        # Create systematic structure
-        (project_path / "index" / "chapters").mkdir(parents=True)
-        (project_path / "runtime" / "lore").mkdir(parents=True)
-        (project_path / "runtime" / "screenplay").mkdir(parents=True)
-        (project_path / "runtime" / "style").mkdir(parents=True)
-        (project_path / "production").mkdir(parents=True)
-        (project_path / "logs").mkdir(parents=True)
-        (project_path / "output").mkdir(parents=True)
+        # Create AFC specific virtual directory structure (on filesystem for now)
+        (project_path / "00_project_config").mkdir(parents=True)
+        (project_path / "01_source_material").mkdir(parents=True)
+        (project_path / "02_screenplays").mkdir(parents=True)
+        (project_path / "03_lore_bible").mkdir(parents=True)
+        (project_path / "04_production_slate").mkdir(parents=True)
+        (project_path / "05_dailies").mkdir(parents=True)
+        (project_path / "06_logs").mkdir(parents=True)
         
-        # Save novel
+        # Save novel in 01_source_material
+        (project_path / "01_source_material" / "novel.txt").write_text(novel_text, encoding="utf-8")
+        # Backwards compatibility symlink/copy for legacy code
         (project_path / "novel.txt").write_text(novel_text, encoding="utf-8")
         
         # Load and save config
@@ -38,11 +40,20 @@ class ProjectManager:
         if template_path.exists():
             config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
         else:
-            config = {}
+            config = {
+                "project_budget_usd": 100.0,
+                "global_aspect_ratio": "16:9",
+                "fps": 24,
+                "resolution": "1080p"
+            }
             
         if config_override:
             config = self._deep_merge(config, config_override)
             
+        with open(project_path / "00_project_config" / "config.yaml", "w", encoding="utf-8") as f:
+            yaml.dump(config, f, sort_keys=False)
+        
+        # Legacy config for main.py loading
         with open(project_path / "config.yaml", "w", encoding="utf-8") as f:
             yaml.dump(config, f, sort_keys=False)
             

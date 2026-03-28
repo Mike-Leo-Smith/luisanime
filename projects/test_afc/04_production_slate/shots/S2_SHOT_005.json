@@ -1,0 +1,19 @@
+{
+    "shot_id": "S2_SHOT_005",
+    "target_duration_ms": 5000,
+    "camera_movement": "Dolly Out",
+    "detailed_camera_plan": "Slow pull back to reveal the full scope of the dining table as秦悍给予鼓励。",
+    "action_description": "秦悍对秦嬴的改变感到欣慰并给予鼓励。",
+    "active_entities": [
+        "秦嬴",
+        "秦悍"
+    ],
+    "staging_description": "餐厅长桌，两人谈话氛围和谐，餐具摆放整齐。",
+    "character_poses": {
+        "秦嬴": "nodding, receptive",
+        "秦悍": "placing hand on table, gesturing approval"
+    },
+    "setting_details": "Wide view of the Qin estate dining room.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Wide shot of the dining room showing both characters, framed by the room architecture."
+}

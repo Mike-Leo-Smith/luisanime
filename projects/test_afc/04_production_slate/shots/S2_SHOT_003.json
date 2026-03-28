@@ -1,0 +1,19 @@
+{
+    "shot_id": "S2_SHOT_003",
+    "target_duration_ms": 5000,
+    "camera_movement": "Pan Right",
+    "detailed_camera_plan": "Follow 秦嬴 as he walks from the center of the room to the dining table and sits opposite to 秦悍.",
+    "action_description": "秦嬴坐下与秦悍一同用餐。",
+    "active_entities": [
+        "秦嬴",
+        "秦悍"
+    ],
+    "staging_description": "餐厅长餐桌，秦悍已就座，秦嬴拉开椅子坐下。",
+    "character_poses": {
+        "秦嬴": "seating himself gracefully",
+        "秦悍": "seated, holding a spoon, looking at 秦嬴"
+    },
+    "setting_details": "Formal dining setup, silverware on the table.",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "Two-shot of 秦嬴 and 秦悍 at the table, table setting centered."
+}

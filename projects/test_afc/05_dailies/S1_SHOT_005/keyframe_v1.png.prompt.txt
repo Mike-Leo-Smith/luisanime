@@ -1,0 +1,39 @@
+Studio Ghibli 2D manga style, hand-drawn aesthetic, high-quality traditional animation. 
+STRICT RULE: This image MUST be the absolute STARTING FRAME (First Frame) of the shot.
+STRICT RULE: Generate ONE single focused cinematic shot. NO multi-panels, NO montages.
+
+
+
+STARTING COMPOSITION (Frame 0):
+ACTION START: Qin Ying nods and responds to the maid's reminder about breakfast.
+INITIAL STAGING: Hallway interaction point.
+INITIAL POSES: {"秦嬴": "Nodding slightly, expression polite but distant, sun hat now in hand."}
+
+ERA CONTEXT: 2013年7月15日
+ATMOSPHERE: Brightly lit, opulent hallway of 秦氏庄园.
+
+LORE CONTEXT: # 秦嬴
+
+Latest State: 秦嬴 is now wearing a sun hat.
+
+VISUAL STYLE REFERENCE:
+1. IDENTIFIED ERA
+2013年7月，大夏国（现代背景，极简都市现实主义）
+故事设定于21世纪初的中国，处于传统家族企业权力更迭与全球化留学潮的交汇点。
+
+ 2. VISUAL STYLE
+*   Palette: "Summer Heatwave" – High-contrast saturated greens (manicured lawns) against blinding white architecture. The palette shifts from warm, oppressive golden-hour yellows to cool, sterile airport blues, reflecting the protagonist’s transition from stagnant luxury to cold, calculated survival.
+*   Lighting: Soft-focus "Ghibli" summer light. Harsh, shimmering heat haze over asphalt, contrasted with the dappled, nostalgic sunlight filtering through the canopy of the Qin estate.
+*   Camera/Lens: Use of wide-angle depth for lush, painterly landscape shots (the estate as a secret garden) and intimate, tight-framed character close-ups to emphasize the psychological tension and the "hidden" nature of the smartwatch holographic interface.
+*   Texture: Hand-painted backgrounds with watercolor textures for greenery; clean, sharp ink-line art for the protagonist’s modern suit and the sleek, metallic geometry of the smartwatch.
+
+ 3. PERIOD DETAILS
+*   Architecture: The Qin estate features a blend of neo-classical white villas and lush, manicured greenery (golf courses, horse paddocks). Interior design relies on ornate red-wood furniture contrasted with modern, glass-walled office aesthetics.
+*   Fashion: 
+    *   秦嬴: Slim-fit Italian charcoal suits, sharp tailoring, transitioning to more utilitarian, modern youth-oriented attire.
+    *   施琼: Traditional silk cheongsam (qipao) with delicate floral patterns and pearl accessories, emphasizing a refined, melancholic "old money" elegance.
+    *   赵悝: Modern professional secretary attire; crisp, minimalist dresses or high-end office wear, emphasizing her calculated, sharp, and "modern academic" persona.
+*   Tech: The juxtaposition of 2013-era consumer tech (iPhone 5, mechanical wristwatches) against the futuristic, glowing blue data streams of the "大宋智慧手表" holographic HUD.
+
+TECHNICAL: 8k resolution, photorealistic, masterpiece. Vibrant but natural colors, lush painterly backgrounds, soft cinematic lighting, clean line art, nostalgic atmosphere, whimsical details, Joe Hisaishi movie vibe, 2D cell shaded.
+REVISION FEEDBACK (FIX THESE): FAIL_ANATOMY

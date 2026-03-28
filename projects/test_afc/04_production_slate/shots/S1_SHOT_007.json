@@ -1,0 +1,17 @@
+{
+    "shot_id": "S1_SHOT_007",
+    "target_duration_ms": 5000,
+    "camera_movement": "Dolly Out",
+    "detailed_camera_plan": "Following 秦嬴 as he walks through the door, camera movement slows as heat haze effect is introduced.",
+    "action_description": "秦嬴走出房门，感受到灼热空气",
+    "active_entities": [
+        "秦嬴"
+    ],
+    "staging_description": "从卧室跨入走廊。",
+    "character_poses": {
+        "秦嬴": "Stepping forward, squinting as if hit by glare."
+    },
+    "setting_details": "秦氏庄园走廊，明亮刺眼的光线。",
+    "era_context": "2013年7月15日",
+    "ending_composition_description": "秦嬴 standing in doorway, hand shielding brow."
+}
