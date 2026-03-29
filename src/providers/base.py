@@ -36,6 +36,7 @@ class LLMResponse:
     usage: Dict[str, int]
     model: str
     finish_reason: Optional[str] = None
+    cost_usd: float = 0.0
 
 
 @dataclass
@@ -44,6 +45,7 @@ class ImageResponse:
     mime_type: str
     usage: Dict[str, int]
     model: str
+    cost_usd: float = 0.0
 
 
 @dataclass
@@ -53,6 +55,7 @@ class VideoResponse:
     resolution: str
     usage: Dict[str, int]
     model: str
+    cost_usd: float = 0.0
 
 
 class BaseLLMProvider(ABC):

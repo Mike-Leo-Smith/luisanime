@@ -66,14 +66,20 @@ class MiniMaxProvider(BaseLLMProvider, BaseImageProvider, BaseVideoProvider):
         content = message.get("content", "")
         usage = data.get("usage", {})
 
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total_tokens = prompt_tokens + completion_tokens
+        cost = (total_tokens / 1_000_000) * 0.10
+
         return LLMResponse(
             text=content,
             usage={
-                "prompt_tokens": usage.get("prompt_tokens", 0),
-                "completion_tokens": usage.get("completion_tokens", 0),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
             model=self.model,
             finish_reason=choice.get("finish_reason"),
+            cost_usd=cost,
         )
 
     def generate_json(
@@ -116,7 +122,9 @@ You must respond with a JSON object that follows this schema:
 
 Respond with valid JSON only."""
 
-        return self.generate_json(schema_prompt, system_prompt, config, media_path=media_path)
+        return self.generate_json(
+            schema_prompt, system_prompt, config, media_path=media_path
+        )
 
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None
@@ -134,7 +142,7 @@ Respond with valid JSON only."""
         config = config or ImageGenerationConfig()
 
         url = f"{self.base_url}/image_generation"
-        
+
         # Map dimensions to MiniMax supported aspect ratios
         ratio = "1:1"
         if config.width > config.height:
@@ -155,23 +163,28 @@ Respond with valid JSON only."""
 
         if config.reference_image or config.reference_media:
             import base64
+
             payload["subject_reference"] = []
-            
+
             if config.reference_image:
                 image_data = base64.b64encode(config.reference_image).decode("utf-8")
-                payload["subject_reference"].append({
-                    "type": "character",
-                    "image_file": f"data:image/png;base64,{image_data}",
-                })
-            
+                payload["subject_reference"].append(
+                    {
+                        "type": "character",
+                        "image_file": f"data:image/png;base64,{image_data}",
+                    }
+                )
+
             if config.reference_media:
                 for path in config.reference_media:
                     with open(path, "rb") as f:
                         image_data = base64.b64encode(f.read()).decode("utf-8")
-                        payload["subject_reference"].append({
-                            "type": "character", # Default to character for now
-                            "image_file": f"data:image/png;base64,{image_data}",
-                        })
+                        payload["subject_reference"].append(
+                            {
+                                "type": "character",  # Default to character for now
+                                "image_file": f"data:image/png;base64,{image_data}",
+                            }
+                        )
 
         response = requests.post(url, headers=self.headers, json=payload)
         response.raise_for_status()
@@ -190,11 +203,13 @@ Respond with valid JSON only."""
         img_response = requests.get(image_url)
         img_response.raise_for_status()
 
+        image_cost = 0.02
         return ImageResponse(
             image_bytes=img_response.content,
             mime_type="image/png",
             usage={"prompt_tokens": 0, "completion_tokens": 0},
             model=self.image_model,
+            cost_usd=image_cost,
         )
 
     def _poll_image_task(self, task_id: str, timeout: int = 300) -> str:
@@ -267,12 +282,14 @@ Respond with valid JSON only."""
         video_response = requests.get(video_url)
         video_response.raise_for_status()
 
+        video_cost = 0.50
         return VideoResponse(
             video_bytes=video_response.content,
             duration=config.duration,
             resolution=config.resolution,
             usage={"prompt_tokens": 0, "completion_tokens": 0},
             model=self.video_model,
+            cost_usd=video_cost,
         )
 
     def _poll_video_task(self, task_id: str, timeout: int = 600) -> str:
@@ -289,7 +306,9 @@ Respond with valid JSON only."""
                 return self._get_download_url(file_id)
             elif status == "fail":
                 print(f"  [MiniMax] Task {task_id} failed. Full response: {data}")
-                raise Exception(f"Video generation failed: {data.get('error_msg') or 'Unknown MiniMax error'}")
+                raise Exception(
+                    f"Video generation failed: {data.get('error_msg') or 'Unknown MiniMax error'}"
+                )
 
             time.sleep(10)
 
