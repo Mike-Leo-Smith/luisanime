@@ -18,19 +18,19 @@ generation:
 models:
   gemini-flash:
     provider: "gemini"
-    model: "gemini-3.1-flash-lite-preview"
+    model: "gemini-2.0-flash"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
 
   gemini-pro:
     provider: "gemini"
-    model: "gemini-3.1-pro-preview"
+    model: "gemini-2.0-pro"
     api_key: "ENV:GEMINI_PRO_API_KEY"
     temperature: 0.2
 
   gemini-image:
     provider: "gemini"
-    model: "nano-banana-pro-preview"
+    model: "gemini-2.0-flash-image"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
 
   minimax-video:
@@ -51,12 +51,6 @@ agents:
     llm: gemini-flash
   script_coordinator:
     llm: gemini-flash
-  previs_artist:
-    llm: gemini-flash
-    video: minimax-video
-    # Budget saving settings
-    resolution: "360p"
-    fps: 8
   cinematographer:
     llm: gemini-flash
     image: gemini-image

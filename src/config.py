@@ -65,47 +65,32 @@ class ConfigLoader:
     def get_agent_config(
         cls, config: Dict[str, Any], agent_name: str
     ) -> Dict[str, Any]:
-        """
-        Get agent configuration with model reference resolved.
-
-        Resolution order:
-        1. Find model reference from agents.{agent_name}.model
-        2. Get model defaults from models.{model_name}
-        3. Apply agent-specific parameter overrides
-        """
         agents = config.get("agents", {})
         models = config.get("models", {})
-
         agent_cfg = agents.get(agent_name, {})
 
         if not agent_cfg:
             raise ValueError(
-                f"Agent '{agent_name}' not found in config. "
-                f"Available agents: {list(agents.keys())}"
+                f"Agent '{agent_name}' not found in config. Available: {list(agents.keys())}"
             )
 
-        # Get model reference
-        model_name = agent_cfg.get("model")
-        if not model_name:
+        model_ref = (
+            agent_cfg.get("llm") or agent_cfg.get("image") or agent_cfg.get("video")
+        )
+        if not model_ref:
             raise ValueError(
-                f"Agent '{agent_name}' must specify a model reference. "
-                f"Example: model: gemini-flash"
+                f"Agent '{agent_name}' must specify llm/image/video model reference"
             )
 
-        # Get model definition
-        model_def = models.get(model_name, {})
+        model_def = models.get(model_ref, {})
         if not model_def:
             raise ValueError(
-                f"Model '{model_name}' referenced by agent '{agent_name}' not found. "
-                f"Available models: {list(models.keys())}"
+                f"Model '{model_ref}' for agent '{agent_name}' not found. Available: {list(models.keys())}"
             )
 
-        # Start with model definition
         merged = model_def.copy()
-
-        # Apply agent-specific overrides (excluding 'model' key)
         for key, value in agent_cfg.items():
-            if key != "model":
+            if key not in ("llm", "image", "video"):
                 merged[key] = value
 
         return merged
