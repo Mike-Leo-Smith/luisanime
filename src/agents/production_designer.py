@@ -52,10 +52,15 @@ Novel Excerpt:
         return style_desc
 
     def generate_design(
-        self, entity_name: str, description: str, master_style: str
+        self,
+        entity_name: str,
+        description: str,
+        master_style: str,
+        scene_id: Optional[str] = None,
     ) -> str:
-        """Generates a locked visual reference image for an entity obeying master style."""
-        print(f"🎨 [Production Designer] Creating visual design for: {entity_name}")
+        print(
+            f"🎨 [Production Designer] Creating visual design for: {entity_name} (scene={scene_id or 'global'})"
+        )
         print(f"   Description: {description[:200]}...")
 
         style_key = self.project_config.get("video", {}).get("style", "cinematic")
@@ -69,7 +74,10 @@ Novel Excerpt:
             prompt = prompt[:1400]
 
         config = ImageGenerationConfig()
-        image_path = f"03_lore_bible/designs/{entity_name}.png"
+        if scene_id:
+            image_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity_name}.png"
+        else:
+            image_path = f"03_lore_bible/designs/{entity_name}.png"
 
         self.log_prompt(
             "ProductionDesigner",
@@ -92,9 +100,15 @@ Novel Excerpt:
         return image_path
 
     def generate_location_design(
-        self, location_name: str, description: str, master_style: str
+        self,
+        location_name: str,
+        description: str,
+        master_style: str,
+        scene_id: Optional[str] = None,
     ) -> str:
-        print(f"🎨 [Production Designer] Creating location design for: {location_name}")
+        print(
+            f"🎨 [Production Designer] Creating location design for: {location_name} (scene={scene_id or 'global'})"
+        )
         print(f"   Description: {description[:200]}...")
 
         style_key = self.project_config.get("video", {}).get("style", "cinematic")
@@ -109,7 +123,12 @@ Novel Excerpt:
 
         config = ImageGenerationConfig()
         safe_name = location_name.replace("/", "_").replace("\\", "_")
-        image_path = f"03_lore_bible/designs/locations/{safe_name}.png"
+        if scene_id:
+            image_path = (
+                f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
+            )
+        else:
+            image_path = f"03_lore_bible/designs/locations/{safe_name}.png"
 
         self.log_prompt(
             "ProductionDesigner",
@@ -157,66 +176,80 @@ def production_designer_node(state: AFCState) -> Dict:
         novel_text = state.get("novel_text", "")
         master_style = agent.generate_master_style(novel_text)
 
-    # 2. Generate location design from scene data
+    # Derive scene_id from shot_id (e.g. "scene_01_SHOT_001" -> "scene_01")
+    scene_id = None
+    if plan:
+        parts = plan.shot_id.rsplit("_SHOT_", 1)
+        if len(parts) == 2:
+            scene_id = parts[0]
+
     scene_path = state.get("current_scene_path")
+    novel_text = state.get("novel_text", "")
+    scene_data = None
     if scene_path:
         try:
             scene_data = ws.read_json(scene_path)
-            location = scene_data.get("physical_location", "")
-            if location:
-                safe_name = location.replace("/", "_").replace("\\", "_")
-                location_design_path = (
-                    f"03_lore_bible/designs/locations/{safe_name}.png"
-                )
-                if not ws.exists(location_design_path):
-                    print(
-                        f"🎨 [Production Designer] Location design missing for '{location}' — generating..."
-                    )
-                    novel_text = state.get("novel_text", "")
-                    extraction_prompt = f"""Extract a PURELY VISUAL description of the location '{location}' from the provided novel text.
-                    Include: architectural style, interior/exterior details, lighting conditions, color palette, atmosphere, and any distinctive features.
-                    STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
-                    
-                    Novel Text:
-                    {novel_text[:50000]}
-                    """
-                    t0 = time.time()
-                    desc_resp = agent.llm.generate_text(
-                        extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
-                    )
-                    elapsed = time.time() - t0
-                    clean_desc = (
-                        desc_resp.text.replace("#", "").replace("**", "").strip()
-                    )
-                    print(
-                        f"🎨 [Production Designer] Location '{location}' description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
-                    )
-                    try:
-                        agent.generate_location_design(
-                            location, clean_desc[:500], master_style
-                        )
-                    except Exception as e:
-                        print(
-                            f"🎨 [Production Designer] ⚠️  Failed to generate location design for '{location}': {e}"
-                        )
-                else:
-                    print(
-                        f"🎨 [Production Designer] Location design already exists for '{location}' — skipping"
-                    )
         except Exception as e:
-            print(f"🎨 [Production Designer] ⚠️  Could not read scene for location: {e}")
+            print(f"🎨 [Production Designer] ⚠️  Could not read scene: {e}")
 
-    # 3. Generate entity designs for current shot
-    if plan:
-        novel_text = state.get("novel_text", "")
-        for entity in plan.active_entities:
-            design_path = f"03_lore_bible/designs/{entity}.png"
-            if not ws.exists(design_path):
+    # 2. Generate scene-specific location design
+    if scene_data and scene_id:
+        location = scene_data.get("physical_location", "")
+        if location:
+            safe_name = location.replace("/", "_").replace("\\", "_")
+            scene_loc_path = (
+                f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
+            )
+            if not ws.exists(scene_loc_path):
                 print(
-                    f"🎨 [Production Designer] Design missing for '{entity}' — generating..."
+                    f"🎨 [Production Designer] Generating scene-specific location design for '{location}' (scene={scene_id})..."
                 )
-                extraction_prompt = f"""Extract a PURELY VISUAL physical description for the entity '{entity}' from the provided novel text.
-                Include: facial features, clothing, body type, and age.
+                scene_context = f"Scene: {scene_data.get('scene_id', '')}. Location: {location}. Era: {scene_data.get('era_context', '')}."
+                extraction_prompt = f"""Extract a PURELY VISUAL description of the location '{location}' as it appears in this specific scene.
+                Include: architectural style, interior/exterior details, lighting conditions, color palette, atmosphere, and any distinctive features.
+                Consider the scene context: {scene_context}
+                STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                
+                Novel Text:
+                {novel_text[:50000]}
+                """
+                t0 = time.time()
+                desc_resp = agent.llm.generate_text(
+                    extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
+                )
+                elapsed = time.time() - t0
+                clean_desc = desc_resp.text.replace("#", "").replace("**", "").strip()
+                print(
+                    f"🎨 [Production Designer] Location '{location}' description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
+                )
+                try:
+                    agent.generate_location_design(
+                        location, clean_desc[:500], master_style, scene_id=scene_id
+                    )
+                except Exception as e:
+                    print(
+                        f"🎨 [Production Designer] ⚠️  Failed to generate location design for '{location}': {e}"
+                    )
+            else:
+                print(
+                    f"🎨 [Production Designer] Scene location design already exists for '{location}' (scene={scene_id}) — skipping"
+                )
+
+    # 3. Generate scene-specific entity designs
+    if plan and scene_id:
+        scene_context_str = ""
+        if scene_data:
+            scene_context_str = f"Scene location: {scene_data.get('physical_location', '')}. Era: {scene_data.get('era_context', '')}. Actions: {', '.join(scene_data.get('actions', [])[:3])}."
+
+        for entity in plan.active_entities:
+            scene_design_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity}.png"
+            if not ws.exists(scene_design_path):
+                print(
+                    f"🎨 [Production Designer] Generating scene-specific design for '{entity}' (scene={scene_id})..."
+                )
+                extraction_prompt = f"""Extract a PURELY VISUAL physical description for the entity '{entity}' as they appear in this specific scene.
+                Include: facial features, clothing appropriate to the scene context, body type, age, and current emotional/physical state.
+                Scene context: {scene_context_str}
                 STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler, no 'As an art director...', no introductory or concluding remarks.
                 
                 Novel Text:
@@ -233,20 +266,19 @@ def production_designer_node(state: AFCState) -> Dict:
                     clean_desc = clean_desc.split("Visual Description:")[1].strip()
 
                 print(
-                    f"🎨 [Production Designer] Entity '{entity}' description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
+                    f"🎨 [Production Designer] Entity '{entity}' scene description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
                 )
                 try:
-                    agent.generate_design(entity, clean_desc[:500], master_style)
+                    agent.generate_design(
+                        entity, clean_desc[:500], master_style, scene_id=scene_id
+                    )
                 except Exception as e:
                     print(
                         f"🎨 [Production Designer] ⚠️  Failed to generate design for '{entity}': {e}"
                     )
-                    print(
-                        f"🎨 [Production Designer] Continuing without design for '{entity}'"
-                    )
             else:
                 print(
-                    f"🎨 [Production Designer] Design already exists for '{entity}' — skipping"
+                    f"🎨 [Production Designer] Scene design already exists for '{entity}' (scene={scene_id}) — skipping"
                 )
 
     print(f"🎨 [Production Designer] === NODE EXIT ===")

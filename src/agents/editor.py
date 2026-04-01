@@ -16,29 +16,32 @@ class EditorAgent(BaseCompiler):
             f"05_dailies/{scene_id}_master.mp4"
         )
 
-        # Simple concatenation using ffmpeg-python
-        inputs = []
+        # Split video/audio because scale/pad filters only apply to video stream
+        segments = []
         for p in shot_paths:
-            stream = ffmpeg.input(self.workspace.get_physical_path(p))
-            stream = stream.filter(
-                "scale", 1920, 1080, force_original_aspect_ratio="decrease"
+            inp = ffmpeg.input(self.workspace.get_physical_path(p))
+            vid = (
+                inp.video.filter(
+                    "scale", 1920, 1080, force_original_aspect_ratio="decrease"
+                )
+                .filter("pad", 1920, 1080, "(ow-iw)/2", "(oh-ih)/2")
+                .filter("setsar", 1)
             )
-            stream = stream.filter("pad", 1920, 1080, "(ow-iw)/2", "(oh-ih)/2")
-            stream = stream.filter("setsar", 1)
-            inputs.append(stream)
+            aud = inp.audio
+            segments += [vid, aud]
 
         try:
             (
-                ffmpeg.concat(*inputs, v=1, a=0)
-                .output(output_path)
+                ffmpeg.concat(*segments, v=1, a=1)
+                .output(output_path, vcodec="libx264", acodec="aac", pix_fmt="yuv420p")
                 .overwrite_output()
                 .run(quiet=True)
             )
-            print(f"✂️ [Editor] Scene master created: {output_path}")
+            print(f"✂️ [Editor] Scene master created (with audio): {output_path}")
         except ffmpeg.Error as e:
             stderr_msg = e.stderr.decode() if e.stderr else str(e)
             print(f"✂️ [Editor] FFMPEG Error: {stderr_msg}")
-            print(f"✂️ [Editor] Retrying with re-encoding...")
+            print(f"✂️ [Editor] Retrying without audio...")
             try:
                 inputs_re = []
                 for p in shot_paths:
@@ -55,7 +58,9 @@ class EditorAgent(BaseCompiler):
                     .overwrite_output()
                     .run(quiet=True)
                 )
-                print(f"✂️ [Editor] Scene master created (re-encoded): {output_path}")
+                print(
+                    f"✂️ [Editor] Scene master created (re-encoded, no audio): {output_path}"
+                )
             except ffmpeg.Error as e2:
                 stderr_msg2 = e2.stderr.decode() if e2.stderr else str(e2)
                 print(f"✂️ [Editor] FFMPEG Retry also failed: {stderr_msg2}")

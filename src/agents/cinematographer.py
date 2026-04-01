@@ -56,22 +56,38 @@ class CinematographerAgent(BaseExecutor):
                 pass
         return "\n".join(context)
 
-    def fetch_design_references(self, entities: List[str]) -> List[str]:
-        """Retrieves locked visual designs (images) for entities."""
+    def fetch_design_references(
+        self, entities: List[str], scene_id: Optional[str] = None
+    ) -> List[str]:
         designs = []
         for entity in entities:
+            if scene_id:
+                scene_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity}.png"
+                if self.workspace.exists(scene_path):
+                    designs.append(scene_path)
+                    continue
             path = f"03_lore_bible/designs/{entity}.png"
             if self.workspace.exists(path):
                 designs.append(path)
         return designs
 
-    def fetch_location_references(self, scene_path: str) -> List[str]:
+    def fetch_location_references(
+        self, scene_path: str, scene_id: Optional[str] = None
+    ) -> List[str]:
         refs = []
         try:
             scene_data = self.workspace.read_json(scene_path)
             location = scene_data.get("physical_location", "")
             if location:
                 safe_name = location.replace("/", "_").replace("\\", "_")
+                if scene_id:
+                    scene_loc_path = f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
+                    if self.workspace.exists(scene_loc_path):
+                        refs.append(scene_loc_path)
+                        print(
+                            f"📸 [Cinematographer] Found scene location design: {scene_loc_path}"
+                        )
+                        return refs
                 path = f"03_lore_bible/designs/locations/{safe_name}.png"
                 if self.workspace.exists(path):
                     refs.append(path)
@@ -153,6 +169,14 @@ Maintain strict spatial coherence with previous shots in the same location. Spec
 - If a character moved an object in a previous shot, it must remain in its new position.
 - Lighting direction (e.g. window on the left casting light rightward) must be consistent with the established environment.
 Use the provided reference images as ground truth for the spatial layout of this environment.
+
+SPATIAL PROPORTIONS AND CHARACTER RELATIONSHIPS (CRITICAL):
+- Object and character scale must be physically realistic relative to the environment (e.g., a door is ~2m tall, a chair reaches waist height, a person's head is roughly 1/7 of their body height).
+- Character height and body proportions must remain consistent with their established design across all shots.
+- Spatial relationships between characters must reflect their dramatic relationship: distance, height difference, facing direction, and body orientation all convey intent.
+- Interaction state must be physically coherent: if one character is handing an object to another, both arms, the object, and the receiving hand must align in 3D space.
+- Gaze direction, head tilt, and body lean must match who the character is addressing or what they are observing.
+- If characters are in physical contact (touching, holding, pushing), the contact point must be anatomically plausible and consistent from both characters' perspectives.
 
 STARTING COMPOSITION (Frame 0):
 ACTION START: {plan.action_description}
@@ -269,10 +293,14 @@ def cinematographer_node(state: AFCState) -> Dict:
             )
 
     lore = agent.fetch_lore_context(plan.active_entities)
-    designs = agent.fetch_design_references(plan.active_entities)
+    scene_id = None
+    parts = plan.shot_id.rsplit("_SHOT_", 1)
+    if len(parts) == 2:
+        scene_id = parts[0]
+    designs = agent.fetch_design_references(plan.active_entities, scene_id=scene_id)
     scene_path = state.get("current_scene_path", "")
     if scene_path:
-        designs += agent.fetch_location_references(scene_path)
+        designs += agent.fetch_location_references(scene_path, scene_id=scene_id)
     feedback = state.get("continuity_feedback")
 
     # Identify last approved shot for continuity

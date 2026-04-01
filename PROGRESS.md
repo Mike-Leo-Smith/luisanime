@@ -82,6 +82,41 @@ The project uses a **LangGraph-based Autonomous Film Crew (AFC)** architecture w
 
 ---
 
+## Phase 5: Reference Image Pipeline & Prompt Enhancement — COMPLETED
+
+- [x] Per-scene character/entity/location design generation by Production Designer
+  - Designs saved to `03_lore_bible/designs/scenes/{scene_id}/`
+  - Fallback to master designs if scene-specific not available
+- [x] Scene-aware design fetching in Cinematographer (character + location references)
+- [x] Reference images passed to Lead Animator → Kling video generation
+  - `<<<image_1>>>` = keyframe (first_frame), `<<<image_2>>>` onwards = character/environment references
+  - Reference images sent as `type: "reference"` in Kling `image_list`
+- [x] `current_scene_path` propagation through pipeline state (Director → Production Designer → Cinematographer → Lead Animator → Editor)
+- [x] Spatial consistency instructions in keyframe generation (room layout, furniture, object positions, door directions)
+- [x] Spatial proportions and character relationships in keyframe prompts
+- [x] Spatial consistency block in video generation distillation prompt
+- [x] Detailed character clothing/positioning/action descriptions in video prompts (350-450 word target)
+- [x] Rewritten `LEAD_ANIMATOR_PROMPT` with priority ordering: clothing > positioning > actions > expressions > camera/lighting
+
+---
+
+## Phase 6: Audio & Assembly — COMPLETED
+
+- [x] Kling audio generation enabled (`sound: "on"` in API config, `enable_audio: True` in `VideoGenerationConfig`)
+- [x] Editor audio-preserving assembly: split video/audio streams, `ffmpeg.concat(..., v=1, a=1)`, `acodec="aac"`
+- [x] Fallback retry without audio if concat fails
+- [x] Screenwriter dialogue design from original novel text (preserves verbatim dialogue, reconstructs indirect speech)
+
+---
+
+## Phase 7: Director & Video Prompt Refinement — IN PROGRESS
+
+- [ ] **Director shot planning enhancement**: Ensure detailed, fluid shot breakdowns with smooth video continuity and logical cinematographic flow. Director must cover every narrative beat, ensure seamless shot-to-shot transitions, and plan pacing suitable for 5-10s video clips.
+- [ ] **Dialogue preservation in video generation prompts**: Current distillation prompt rule #8 suppresses spoken words. Since Kling supports audio generation (`sound: "on"`), dialogue lines must be included in quotation marks per Kling docs so the model generates matching speech audio. Need to update `_build_distillation_prompt()` rule #8 and the `LEAD_ANIMATOR_PROMPT` system prompt.
+- [ ] **Commit all accumulated changes** (7+ modified files from Phase 5-6, plus Phase 7 changes)
+
+---
+
 ## Known Issues
 
 1. **Type Checking**: Some agents have Pyright errors around provider method calls (`self.llm` typed as `Optional`) — runtime works but type narrowing needs refinement
@@ -99,10 +134,9 @@ The project uses a **LangGraph-based Autonomous Film Crew (AFC)** architecture w
 - [ ] Type narrowing fixes for provider attributes
 
 ### Medium Term
-- [ ] Audio generation (TTS for dialogue, BGM)
-- [ ] Lip-sync integration
 - [ ] Advanced transitions (cross-fades, wipes) in Editor
 - [ ] Web UI for project management and progress monitoring
+- [ ] Lip-sync refinement (currently relies on Kling audio generation)
 
 ### Long Term
 - [ ] Distributed execution support
@@ -113,5 +147,6 @@ The project uses a **LangGraph-based Autonomous Film Crew (AFC)** architecture w
 
 *Last Updated: April 2, 2026*
 *Architecture: Autonomous Film Crew (AFC) via LangGraph*
-*Video Provider: Kling v3-omni*
+*Video Provider: Kling v3-omni (with audio generation)*
 *LLM: Gemini 3.1 Pro*
+*Image: Gemini 3.1 Flash Image Preview*

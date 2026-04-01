@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import os
 import time
 import ffmpeg
@@ -44,8 +44,57 @@ class LeadAnimatorAgent(BaseExecutor):
             print(f"🎨 [Lead Animator] Could not load previous shot plan: {e}")
             return None
 
+    def _gather_reference_images(
+        self, plan: ShotExecutionPlan, scene_path: Optional[str] = None
+    ) -> List[str]:
+        scene_id = None
+        parts = plan.shot_id.rsplit("_SHOT_", 1)
+        if len(parts) == 2:
+            scene_id = parts[0]
+
+        refs = []
+        for entity_id in plan.active_entities:
+            if scene_id:
+                scene_design = (
+                    f"03_lore_bible/designs/scenes/{scene_id}/{entity_id}.png"
+                )
+                if self.workspace.exists(scene_design):
+                    refs.append(self.workspace.get_physical_path(scene_design))
+                    continue
+            path = f"03_lore_bible/designs/{entity_id}.png"
+            if self.workspace.exists(path):
+                refs.append(self.workspace.get_physical_path(path))
+
+        if scene_path:
+            try:
+                scene_data = self.workspace.read_json(scene_path)
+                location = scene_data.get("physical_location", "")
+                if location:
+                    safe_name = location.replace("/", "_").replace("\\", "_")
+                    if scene_id:
+                        scene_loc = f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
+                        if self.workspace.exists(scene_loc):
+                            refs.append(self.workspace.get_physical_path(scene_loc))
+                            print(
+                                f"🎨 [Lead Animator] Gathered {len(refs)} reference images: {[os.path.basename(r) for r in refs]}"
+                            )
+                            return refs
+                    loc_path = f"03_lore_bible/designs/locations/{safe_name}.png"
+                    if self.workspace.exists(loc_path):
+                        refs.append(self.workspace.get_physical_path(loc_path))
+            except Exception:
+                pass
+        print(
+            f"🎨 [Lead Animator] Gathered {len(refs)} reference images: {[os.path.basename(r) for r in refs]}"
+        )
+        return refs
+
     def _build_distillation_prompt(
-        self, plan: ShotExecutionPlan, action_text: str, master_style: str
+        self,
+        plan: ShotExecutionPlan,
+        action_text: str,
+        master_style: str,
+        ref_labels: Optional[List[tuple]] = None,
     ) -> str:
         appearance_lines = []
         for entity_id, pose in plan.character_poses.items():
@@ -64,26 +113,50 @@ class LeadAnimatorAgent(BaseExecutor):
         if hasattr(plan, "dialogue") and plan.dialogue:
             dialogue_desc = []
             for d in plan.dialogue:
-                dialogue_desc.append(
-                    f'- {d.get("speaker", "a character")} speaks with {d.get("emotion", "neutral")} emotion: "{d.get("line", "")}"'
-                )
+                speaker_desc = d.get("speaker", "a character")
+                emotion = d.get("emotion", "neutral")
+                line = d.get("line", "")
+                dialogue_desc.append(f'- {speaker_desc} ({emotion}): "{line}"')
             dialogue_block = f"""
-        DIALOGUE DURING THIS SHOT (characters should show lip movement and matching expressions):
-        {chr(10).join(dialogue_desc)}"""
+        DIALOGUE DURING THIS SHOT (audio will be generated — include spoken lines EXACTLY as written in quotation marks):
+        {chr(10).join(dialogue_desc)}
+        The video model generates audio. You MUST include each dialogue line in your output using the format: the character says "exact line here". Also describe matching lip movement, facial expressions, and body language reflecting the emotion."""
+
+        ref_block = ""
+        if ref_labels:
+            ref_lines = []
+            for token, label in ref_labels:
+                ref_lines.append(f"- {token}: {label}")
+            ref_block = f"""
+        REFERENCE IMAGES (use these tokens to refer to character/environment reference images for visual consistency):
+        {chr(10).join(ref_lines)}
+        When describing a character's appearance or the environment, reference the corresponding image token so the video model maintains visual consistency."""
 
         return f"""Combine the following cinematic instructions into a single PURELY PHYSICAL motion description in English for a video generation model.
         
         STRICT RULES:
         1. Remove all character names, specific locations, brand names, and sensitive/abstract concepts.
-        2. Replace character names with generic descriptors based on their appearance (e.g., "the young man in the dark blue coat", "the woman in the red silk dress").
-        3. Focus ONLY on: light quality, camera movement, physical body dynamics, and character clothing/appearance for identification.
+        2. Replace character names with DETAILED generic descriptors based on their FULL appearance — always include their clothing, hairstyle, and distinguishing features (e.g., "the young man in a dark navy double-breasted wool coat over a white collared shirt, with short black hair", "the slender woman in a crimson silk qipao with gold embroidery, hair pinned up with a jade hairpin").
+        3. For EACH character visible in the shot, the output MUST include:
+           a) Full clothing description (fabric, color, cut, layering, accessories)
+           b) Body position and staging (where they stand/sit relative to the environment and other characters, facing direction)
+           c) Specific physical action and gesture (what their hands, arms, head, torso are doing moment by moment)
+           d) Facial expression and gaze direction
         4. Start the description by referencing the starting keyframe image. Use the exact token <<<image_1>>> to refer to it.
            Example: "Starting from <<<image_1>>>, the camera slowly dollies forward as the figure raises their hand..."
-        5. Keep the description concise (under 200 words) but cinematically precise.
-        6. When describing character motion, include what they are wearing so the video model maintains clothing consistency.
+        5. The description should be DETAILED and thorough (350-450 words). Do NOT over-compress or omit character details. Every character's clothing, position, and action must be explicitly described — the video model cannot infer what it is not told.
+        6. Include light quality, camera movement, and environmental atmosphere, but character appearance and action details take PRIORITY — never sacrifice character description for brevity.
         7. NEVER include any on-screen text, subtitles, captions, dialogue bubbles, narration overlays, or watermarks in the description. The output is a PURE VISUAL motion sequence with zero text elements.
-        8. If characters are speaking, describe their lip movement and facial expressions reflecting the emotion of the dialogue, but do NOT include the actual spoken words in the output.
+        8. If characters are speaking, you MUST include their dialogue in your output. Write it as: the character says "exact spoken line here" (in the original language). The video model generates audio from your text, so spoken lines in quotation marks are essential for correct speech synthesis. Also describe lip movement, facial expressions, and body gestures matching the emotion of the dialogue.
+        9. Include the reference image tokens (<<<image_2>>>, <<<image_3>>>, etc.) when first describing each character or the environment, so the video model can match their visual appearance and the spatial layout.
         
+        SPATIAL CONSISTENCY:
+        - Maintain the spatial layout visible in the starting keyframe <<<image_1>>>. Object positions, furniture, and architectural features must not shift during the video.
+        - Character scale and body proportions must stay physically realistic relative to the environment throughout the motion.
+        - Spatial relationships between characters (distance, facing direction, relative height) must evolve naturally from the starting keyframe — no teleporting or sudden repositioning.
+        - If a character interacts with an object or another character, the contact point must be anatomically plausible and spatially consistent with the established layout.
+        - Gaze direction and body orientation must match who/what the character is addressing at each moment.
+        {ref_block}
         CHARACTER APPEARANCES AND POSES:
         {appearance_block}
         {dialogue_block}
@@ -99,6 +172,7 @@ class LeadAnimatorAgent(BaseExecutor):
         safe_prompt: str,
         image_path: str,
         proxy: Optional[str],
+        reference_images: Optional[List[str]] = None,
     ) -> str:
         shot_id = plan.shot_id
 
@@ -115,6 +189,8 @@ class LeadAnimatorAgent(BaseExecutor):
 
         config = VideoGenerationConfig()
         config.enable_audio = True
+        if reference_images:
+            config.reference_images = reference_images
         if plan.target_duration_ms:
             target_s = plan.target_duration_ms / 1000.0
             config.duration = 10 if target_s > 7 else 5
@@ -141,8 +217,36 @@ class LeadAnimatorAgent(BaseExecutor):
         )
         return video_path
 
+    def _build_ref_labels(
+        self, plan: ShotExecutionPlan, ref_paths: List[str]
+    ) -> List[tuple]:
+        labels = []
+        idx = 2
+        for ref_path in ref_paths:
+            basename = os.path.basename(ref_path).replace(".png", "")
+            if basename in plan.active_entities:
+                labels.append(
+                    (f"<<<image_{idx}>>>", f"Character reference for {basename}")
+                )
+            elif "locations" in ref_path or "location" in ref_path.lower():
+                labels.append(
+                    (
+                        f"<<<image_{idx}>>>",
+                        f"Environment/location reference: {basename}",
+                    )
+                )
+            else:
+                labels.append((f"<<<image_{idx}>>>", f"Visual reference: {basename}"))
+            idx += 1
+        return labels
+
     def generate_video_v2v(
-        self, plan: ShotExecutionPlan, keyframe: str, proxy: Optional[str], prompt: str
+        self,
+        plan: ShotExecutionPlan,
+        keyframe: str,
+        proxy: Optional[str],
+        prompt: str,
+        scene_path: Optional[str] = None,
     ) -> str:
         shot_id = plan.shot_id
         print(f"🎨 [Lead Animator] Executing render for {shot_id}")
@@ -155,8 +259,11 @@ class LeadAnimatorAgent(BaseExecutor):
         except Exception:
             master_style = "Cinematic, high fidelity."
 
+        ref_paths = self._gather_reference_images(plan, scene_path)
+        ref_labels = self._build_ref_labels(plan, ref_paths)
+
         distillation_prompt = self._build_distillation_prompt(
-            plan, prompt, master_style
+            plan, prompt, master_style, ref_labels=ref_labels if ref_labels else None
         )
 
         print(f"🎨 [Lead Animator] Distilling motion prompt...")
@@ -172,7 +279,7 @@ class LeadAnimatorAgent(BaseExecutor):
 
         keyframe_physical = self.workspace.get_physical_path(keyframe)
         return self._apply_style_and_generate(
-            plan, safe_prompt, keyframe_physical, proxy
+            plan, safe_prompt, keyframe_physical, proxy, reference_images=ref_paths
         )
 
     def generate_video_continuation(
@@ -182,6 +289,7 @@ class LeadAnimatorAgent(BaseExecutor):
         last_frame_path: str,
         merged_action: str,
         proxy: Optional[str],
+        scene_path: Optional[str] = None,
     ) -> str:
         shot_id = current_plan.shot_id
         print(f"🎨 [Lead Animator] Executing CONTINUATION render for {shot_id}")
@@ -194,8 +302,14 @@ class LeadAnimatorAgent(BaseExecutor):
         except Exception:
             master_style = "Cinematic, high fidelity."
 
+        ref_paths = self._gather_reference_images(current_plan, scene_path)
+        ref_labels = self._build_ref_labels(current_plan, ref_paths)
+
         distillation_prompt = self._build_distillation_prompt(
-            current_plan, merged_action, master_style
+            current_plan,
+            merged_action,
+            master_style,
+            ref_labels=ref_labels if ref_labels else None,
         )
 
         print(f"🎨 [Lead Animator] Distilling continuation motion prompt...")
@@ -210,7 +324,11 @@ class LeadAnimatorAgent(BaseExecutor):
         )
 
         return self._apply_style_and_generate(
-            current_plan, safe_prompt, last_frame_path, proxy
+            current_plan,
+            safe_prompt,
+            last_frame_path,
+            proxy,
+            reference_images=ref_paths,
         )
 
 
@@ -237,6 +355,8 @@ def lead_animator_node(state: AFCState) -> Dict:
         print(f"🎨 [Lead Animator] === NODE EXIT === No plan (no-op)")
         return {}
 
+    scene_path = state.get("current_scene_path")
+
     if getattr(plan, "is_continuation", False) and dailies:
         prev_video = dailies[-1]
         prev_shot_id = prev_video.split("/")[-2] if "/" in prev_video else None
@@ -260,6 +380,7 @@ def lead_animator_node(state: AFCState) -> Dict:
                         last_frame,
                         merged_action,
                         state.get("current_proxy_path"),
+                        scene_path=scene_path,
                     )
                     print(
                         f"🎨 [Lead Animator] === NODE EXIT === render={render_path} (continuation)"
@@ -289,6 +410,7 @@ def lead_animator_node(state: AFCState) -> Dict:
         state["current_keyframe_path"],
         state.get("current_proxy_path"),
         plan.action_description,
+        scene_path=scene_path,
     )
 
     print(f"🎨 [Lead Animator] === NODE EXIT === render={render_path}")

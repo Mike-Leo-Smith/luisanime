@@ -145,6 +145,15 @@ class KlingProvider(BaseVideoProvider):
                 }
             )
 
+        if config.reference_images:
+            for ref_path in config.reference_images:
+                image_list.append(
+                    {
+                        "image_url": self._encode_image_file(ref_path),
+                        "type": "reference",
+                    }
+                )
+
         if image_list:
             payload["image_list"] = image_list
         else:

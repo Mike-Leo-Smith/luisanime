@@ -102,6 +102,15 @@ class DirectorAgent(BaseCreative):
         If a shot has no dialogue, use an empty array.
         Dialogue timing should match the shot's action — a character speaking should be visible and their expression should match the emotion.
         
+        CINEMATIC FLUIDITY RULES:
+        1. COMPLETE COVERAGE: Every story beat in the scene MUST have a corresponding shot. Do NOT skip any action, dialogue exchange, or emotional shift. If the scene has 5 distinct events, you need at minimum 5 shots.
+        2. SMOOTH TRANSITIONS: Plan how each shot visually connects to the next. Use match cuts, continuous pans, or cut-on-action — avoid static-to-static jumps.
+        3. PACING: Dialogue-heavy or complex-action shots should use target_duration_ms=10000. Simple establishing or transition shots use target_duration_ms=5000. Never pack more than 2 distinct movements into one shot.
+        4. SHOT VARIETY: Alternate between wide, medium, and close-up shots. Do not use the same scale for 3+ consecutive shots.
+        5. MOTION: Every shot must contain visible motion — at minimum a subtle camera movement (slow dolly, gentle pan) or character micro-action (breathing, shifting weight, blinking). Fully static shots produce poor video output.
+        6. SPATIAL MAP: Maintain consistent character positions and object placement. If a character is on the left, they stay on the left unless they visibly walk to the right.
+        7. ENDING COMPOSITION: The 'ending_composition_description' is CRITICAL — downstream agents use it to generate the next shot's starting frame. Describe the exact visual state: character positions, expressions, camera framing, lighting.
+        
         STRICT RULES:
         1. Keep character names, locations, and IDs in the ORIGINAL LANGUAGE (Chinese).
         2. Era Context: Precisely determine the specific historical era or setting.
