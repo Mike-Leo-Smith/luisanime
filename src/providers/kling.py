@@ -116,6 +116,7 @@ class KlingProvider(BaseVideoProvider):
             "prompt": prompt,
             "duration": str(config.duration),
             "mode": self.mode,
+            "sound": "on" if config.enable_audio else "off",
         }
 
         # Build image_list for first_frame and last_frame
@@ -162,7 +163,7 @@ class KlingProvider(BaseVideoProvider):
             ]
 
         print(
-            f"  [Kling] Creating video task: model={self.model}, mode={self.mode}, duration={config.duration}s"
+            f"  [Kling] Creating video task: model={self.model}, mode={self.mode}, duration={config.duration}s, sound={'on' if config.enable_audio else 'off'}"
         )
         print(f"  [Kling] Prompt: {prompt[:500]}")
         print(

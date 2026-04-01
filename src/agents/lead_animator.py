@@ -114,6 +114,7 @@ class LeadAnimatorAgent(BaseExecutor):
         full_prompt = f"{prefix} {safe_prompt} {suffix}"
 
         config = VideoGenerationConfig()
+        config.enable_audio = True
         if plan.target_duration_ms:
             target_s = plan.target_duration_ms / 1000.0
             config.duration = 10 if target_s > 7 else 5

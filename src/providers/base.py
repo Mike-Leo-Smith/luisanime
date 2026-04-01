@@ -28,6 +28,7 @@ class VideoGenerationConfig(GenerationConfig):
     first_frame: Optional[bytes] = None
     last_frame: Optional[bytes] = None
     control_video_path: Optional[str] = None
+    enable_audio: bool = True
 
 
 @dataclass
