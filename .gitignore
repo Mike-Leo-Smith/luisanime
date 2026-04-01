@@ -3,5 +3,7 @@ __pycache__/
 .env
 workspace/
 .pytest_cache/
-projects/test_project/
-test_novel.txt
+projects/
+novel_backup.txt
+pipeline_run*.log
+test_novel*.txt

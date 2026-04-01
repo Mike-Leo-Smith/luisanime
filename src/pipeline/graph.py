@@ -13,16 +13,37 @@ from src.agents.editor import editor_node
 
 
 def route_macro_loop(state: AFCState) -> Literal["director", "__end__"]:
-    if state.get("unprocessed_scenes") and not state.get("escalation_required"):
+    unprocessed = state.get("unprocessed_scenes", [])
+    escalation = state.get("escalation_required", False)
+    print(f"\n{'=' * 60}")
+    print(f"🔀 [ROUTER] route_macro_loop")
+    print(f"   unprocessed_scenes: {len(unprocessed)} remaining — {unprocessed}")
+    print(f"   escalation_required: {escalation}")
+    if unprocessed and not escalation:
+        print(f"   ➡️  DECISION: Route to 'director' (scenes remain)")
+        print(f"{'=' * 60}\n")
         return "director"
+    reason = "no scenes left" if not unprocessed else "escalation required"
+    print(f"   ➡️  DECISION: Route to '__end__' ({reason})")
+    print(f"{'=' * 60}\n")
     return "__end__"
 
 
 def route_after_script_coordinator(
     state: AFCState,
 ) -> Literal["production_designer", "editor"]:
-    if state.get("active_shot_plan") or state.get("unprocessed_shots"):
+    active_shot = state.get("active_shot_plan")
+    unprocessed = state.get("unprocessed_shots", [])
+    print(f"\n{'=' * 60}")
+    print(f"🔀 [ROUTER] route_after_script_coordinator")
+    print(f"   active_shot_plan: {active_shot.shot_id if active_shot else None}")
+    print(f"   unprocessed_shots: {len(unprocessed)} remaining")
+    if active_shot or unprocessed:
+        print(f"   ➡️  DECISION: Route to 'production_designer' (shots to process)")
+        print(f"{'=' * 60}\n")
         return "production_designer"
+    print(f"   ➡️  DECISION: Route to 'editor' (all shots done for this scene)")
+    print(f"{'=' * 60}\n")
     return "editor"
 
 
@@ -31,21 +52,59 @@ def route_after_continuity_supervisor(
 ) -> Literal["lead_animator", "cinematographer", "script_coordinator", "director"]:
     current_render = state.get("current_render_path")
     feedback = state.get("continuity_feedback")
-    is_render_phase = current_render is not None and feedback is not None
+    current_keyframe = state.get("current_keyframe_path")
+    is_render_phase = current_render is not None
+    retry_count = state.get("render_retry_count", 0)
+
+    print(f"\n{'=' * 60}")
+    print(f"🔀 [ROUTER] route_after_continuity_supervisor")
+    print(f"   current_render_path: {current_render}")
+    print(f"   current_keyframe_path: {current_keyframe}")
+    print(f"   continuity_feedback: {feedback[:100] if feedback else None}")
+    print(f"   is_render_phase: {is_render_phase}")
+    print(f"   render_retry_count: {retry_count}")
 
     if is_render_phase:
         if not feedback:
+            print(
+                f"   ➡️  DECISION: Route to 'script_coordinator' (render approved, next shot)"
+            )
+            print(f"{'=' * 60}\n")
             return "script_coordinator"
         else:
-            retry_count = state.get("render_retry_count", 0)
             if retry_count >= 3:
-                print("🚨 [CIRCUIT BREAKER] Escalate to Director")
+                print(f"   🚨 [CIRCUIT BREAKER] retry_count={retry_count} >= 3")
+                print(
+                    f"   ➡️  DECISION: Route to 'director' (escalate for simplification)"
+                )
+                print(f"{'=' * 60}\n")
                 return "director"
+            print(
+                f"   ➡️  DECISION: Route to 'lead_animator' (re-render, retry #{retry_count + 1})"
+            )
+            print(f"{'=' * 60}\n")
             return "lead_animator"
     else:
         if not feedback:
+            print(
+                f"   ➡️  DECISION: Route to 'lead_animator' (keyframe approved, generate video)"
+            )
+            print(f"{'=' * 60}\n")
             return "lead_animator"
         else:
+            if retry_count >= 3:
+                print(
+                    f"   🚨 [CIRCUIT BREAKER] Keyframe retry_count={retry_count} >= 3"
+                )
+                print(
+                    f"   ➡️  DECISION: Route to 'director' (escalate for simplification)"
+                )
+                print(f"{'=' * 60}\n")
+                return "director"
+            print(
+                f"   ➡️  DECISION: Route to 'cinematographer' (keyframe rejected, regenerate)"
+            )
+            print(f"{'=' * 60}\n")
             return "cinematographer"
 
 

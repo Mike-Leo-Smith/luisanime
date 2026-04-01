@@ -9,60 +9,56 @@ This document outlines the critical requirements, workflow patterns, skills, and
 All agents that interact with LLMs must use structured output via JSON schemas:
 
 ```python
-from src.schemas import ENTITY_SCHEMA
 from src.agents.utils import get_llm_provider
 
 def my_agent(state: PipelineState) -> PipelineState:
     provider = get_llm_provider(state, "agent_name")
-    
+
     result = provider.generate_structured(
         prompt=prompt,
         response_schema=ENTITY_SCHEMA
     )
-    # result is guaranteed to match the schema
 ```
-
-**Why:** Prevents parsing errors, ensures type safety, reduces token waste on malformed outputs.
 
 ### 2. Provider Factory Pattern
 
-Never instantiate providers directly. Always use the factory:
+Never instantiate providers directly. Always use the factory via base agent classes:
 
 ```python
-from src.agents.utils import get_llm_provider, get_image_provider, get_video_provider
+from src.agents.base import BaseCreative
 
-llm = get_llm_provider(state, "agent_name")
-image_gen = get_image_provider(state, "agent_name")
-video_gen = get_video_provider(state, "agent_name")
+class MyAgent(BaseCreative):
+    # self.llm, self.image_gen are initialized from config
+    pass
+
+agent = MyAgent.from_config(workspace, project_config)
 ```
 
-**Why:** Ensures consistent configuration, API key management, and provider switching.
+Or via the factory directly:
+
+```python
+from src.providers.factory import ProviderFactory
+
+llm = ProviderFactory.create_llm(agent_cfg)
+image_gen = ProviderFactory.create_image(agent_cfg)
+video_gen = ProviderFactory.create_video(agent_cfg)
+```
 
 ### 3. Project Directory Structure
 
-Agents must respect the project structure:
-
 ```
 project/
-├── src/           # Source materials (read-only)
-├── assets/        # Generated assets (write)
-├── index/         # Chapter index (write)
-├── scenes/        # Scene organization (write)
-├── cache/         # Cache files (write)
-├── checkpoints/   # State snapshots (write)
-├── output/        # Final deliverables (write)
-└── logs/          # Logs (write)
-```
-
-**Access via ProjectManager:**
-```python
-from src.pipeline.project import ProjectManager
-
-pm = ProjectManager("./projects")
-pm.load_project("my_project")
-
-novel_path = pm.get_src_path("novel.txt")
-entities_path = pm.get_assets_path("lore", "entities.json")
+├── 00_project_config/    # Configuration (read)
+├── 01_source_material/   # Source novel (read)
+├── 02_screenplays/       # Scene scripts (write)
+├── 03_lore_bible/        # Character sheets, location designs (write)
+│   └── designs/
+│       └── locations/
+├── 04_production_slate/  # Shot execution plans (write)
+│   └── shots/
+├── 05_dailies/           # Keyframes and video clips (write)
+├── 06_logs/              # Logs and QA reports (write)
+└── config.yaml
 ```
 
 ### 4. Progress Reporting
@@ -75,14 +71,11 @@ def process_chapters(chapters):
     for i, chapter in enumerate(chapters, 1):
         progress = (i / total) * 100
         print(f"    [{i}/{total} {progress:.1f}%] Processing {chapter.id}...")
-        # ... process chapter
 ```
-
-**Why:** Users need visibility into multi-minute operations.
 
 ### 5. Error Handling
 
-Agents must catch exceptions and set state["last_error"]:
+Agents must catch exceptions and set `state["last_error"]`:
 
 ```python
 def my_agent(state: PipelineState) -> PipelineState:
@@ -94,291 +87,145 @@ def my_agent(state: PipelineState) -> PipelineState:
     return state
 ```
 
-**Why:** Prevents pipeline crashes, enables retry logic.
-
 ## Workflow Patterns
 
-### Agent File Template
+### Node Function Template
+
+Each agent has a class (methods) and a node function (LangGraph entry point):
 
 ```python
-from src.pipeline.state import PipelineState
-from src.schemas import SOME_SCHEMA
-from src.agents.utils import get_llm_provider
+from typing import Dict
+from src.agents.base import BaseCreative
+from src.pipeline.state import AFCState, ShotExecutionPlan
 
-def agent_name(state: PipelineState) -> PipelineState:
-    print("--- AGENT NAME: Description ---")
-    
-    provider = get_llm_provider(state, "agent_name")
-    
+
+class MyAgent(BaseCreative):
+    def do_work(self, plan: ShotExecutionPlan) -> str:
+        # Agent logic here
+        pass
+
+
+def my_agent_node(state: AFCState) -> Dict:
+    print(f"\n{'=' * 60}")
+    print(f"🎯 [My Agent] === NODE ENTRY ===")
+    plan = state.get("active_shot_plan")
+    print(f"   active_shot_plan: {plan.shot_id if plan else None}")
+    print(f"{'=' * 60}")
+
+    from src.pipeline.workspace import AgenticWorkspace
+
+    ws = AgenticWorkspace(state["workspace_root"])
+    agent = MyAgent.from_config(ws, state["project_config"])
+
+    if not plan:
+        print(f"🎯 [My Agent] === NODE EXIT === No plan (no-op)")
+        return {}
+
     try:
-        result = provider.generate_structured(
-            prompt=build_prompt(state),
-            response_schema=SOME_SCHEMA
-        )
-        state["field"] = transform_result(result)
-        print(f"  Processed {len(result)} items")
+        result = agent.do_work(plan)
+        print(f"🎯 [My Agent] === NODE EXIT === result={result}")
+        return {"some_state_key": result}
     except Exception as e:
-        print(f"Error: {e}")
-        state["last_error"] = str(e)
-    
-    return state
-
-
-def build_prompt(state: PipelineState) -> str:
-    return f"""Context from state...
-    
-    Task: Do something specific.
-    """
+        print(f"🎯 [My Agent] Error: {e}")
+        return {}
 ```
 
-### Chapter-Aware Agents
+### Shot Continuation Handling
 
-For agents that process chapters:
+Agents that process shots must respect the `is_continuation` flag:
 
 ```python
-from src.agents.utils import get_chapter_db
+plan = state.get("active_shot_plan")
 
-def chapter_aware_agent(state: PipelineState) -> PipelineState:
-    chapter_db = get_chapter_db(state)
-    
-    if chapter_db and len(chapter_db.chapters) > 0:
-        # Process chapters with progress reporting
-        for i, chapter in enumerate(chapter_db.get_all_chapters(), 1):
-            print(f"  [{i}/{len(chapter_db.chapters)}] {chapter.id}")
-            # ... process chapter
-    else:
-        # Fallback to novel_text
-        novel_text = state["novel_text"]
-        # ... process text
-    
-    return state
+if getattr(plan, "is_continuation", False):
+    # This shot continues from the previous shot's motion
+    # - Cinematographer: extract last frame instead of generating keyframe
+    # - Continuity Supervisor: auto-pass (no QA needed)
+    # - Lead Animator: use generate_video_continuation() with merged action
+    pass
 ```
 
-### State Mutation Pattern
+### Shot ID Format
 
-Agents should:
-1. Read from state
-2. Process with LLM/providers
-3. Write results to state
-4. Return state (modified or not)
-
-```python
-def example_agent(state: PipelineState) -> PipelineState:
-    # Read
-    scenes = state["scenes"]
-    current_idx = state["current_scene_index"]
-    current_scene = scenes[current_idx]
-    
-    # Process
-    shots = generate_shots(current_scene)
-    
-    # Write
-    state["shot_list"] = shots
-    state["current_shot_index"] = 0
-    
-    return state
-```
+Shot IDs follow `{scene_id}_SHOT_{index:03d}`:
+- `scene_01_SHOT_001`, `scene_01_SHOT_002`, etc.
+- Scene IDs: `scene_01`, `scene_02`, etc.
+- Deterministically assigned by Director (overrides LLM output)
 
 ## Agent Skills
 
 ### Required Skills
 
-1. **LLM Prompt Engineering**
-   - Clear task descriptions
-   - Context window management
-   - JSON output formatting
+1. **LLM Prompt Engineering** — Clear task descriptions, JSON output formatting
+2. **Provider Abstraction** — Factory pattern, per-agent config
+3. **Schema Design** — Gemini-compatible JSON schemas (uppercase types, no union types)
+4. **Error Resilience** — Exception handling, graceful degradation
 
-2. **Provider Abstraction**
-   - Understanding factory pattern
-   - Configuring per-agent models
-   - Handling provider-specific quirks
+### Gemini Schema Rules
 
-3. **Schema Design**
-   - Gemini-compatible JSON schemas (uppercase types)
-   - No union types (use nullable instead)
-   - Clear field descriptions
-
-4. **Project Structure**
-   - Correct directory usage
-   - File path conventions
-   - Checkpoint integration
-
-5. **Error Resilience**
-   - Exception handling
-   - Graceful degradation
-   - User-friendly error messages
-
-### Optional Skills
-
-1. **Vision-Language Models** (for QA Linter)
-2. **Video Generation APIs** (for Animator)
-3. **Image Generation APIs** (for Storyboarder)
-4. **FFmpeg/Video Processing** (for Compositor)
-
-## Lessons Learned
-
-### 1. JSON Schema Compatibility
-
-**Problem:** Gemini's API doesn't support standard JSON Schema features like `patternProperties` or union types (`["string", "null"]`).
-
-**Solution:** Use Gemini's format:
 ```python
-# Bad (standard JSON Schema)
+# Standard JSON Schema (NOT supported)
 {"type": ["string", "null"]}
 {"patternProperties": {...}}
 
-# Good (Gemini compatible)
+# Gemini-compatible format
 {"type": "STRING", "nullable": True}
 {"type": "ARRAY", "items": {...}}
 ```
 
-### 2. Provider Response Handling
+## Lessons Learned
 
-**Problem:** Different providers return different response formats.
+### 1. Shot Naming Consistency
+Shot IDs must be deterministically assigned by the Director (`scene_01_SHOT_001` format), not rely on LLM output which may vary between runs.
 
-**Solution:** Always use `generate_structured()` which normalizes responses:
-```python
-# Returns parsed dict, not LLMResponse
-result = provider.generate_structured(prompt, schema)
-```
+### 2. Continuation vs New Shot
+The Director marks `is_continuation=True` at planning time. The first shot of every scene is always `is_continuation=False`. Downstream agents check this flag rather than making their own continuation decisions.
 
-### 3. Token Management
+### 3. No-Text Enforcement
+All style presets include explicit no-text instructions: "No text, no subtitles, no dialogue bubbles, no captions, no watermarks." This is enforced in both keyframe and video generation prompts.
 
-**Problem:** Long novels exceed context windows.
+### 4. Character Clothing in Prompts
+Both keyframe and video generation prompts include character appearance descriptions from the lore bible (`03_lore_bible/{entity_id}.md`) to maintain clothing consistency.
 
-**Solution:** 
-- Use chapter-based processing
-- Truncate text with `[:3000]` for metadata extraction
-- Use `[:8000]` for scene extraction
+### 5. Mirror Reflection QA
+The Continuity Supervisor is instructed to not flag laterally inverted details in mirror reflections as errors, since lateral inversion is physically correct.
 
-### 4. API Key Organization
+### 6. Keyframe Versioning
+Keyframes are versioned (`keyframe_v1.png`, `keyframe_v2.png`, `keyframe_v3.png`). The `render_retry_count` in state tracks which version we're on. If all 3 fail, best-of-N selection picks the least severe.
 
-**Problem:** Different agents need different API keys.
+### 7. Location Reference Images
+The Production Designer generates location reference images (`03_lore_bible/designs/locations/{name}.png`) which the Cinematographer includes as reference when generating keyframes.
 
-**Solution:** Model-specific keys in `.env`:
-```
-GEMINI_FLASH_API_KEY=...  # For high-token agents
-GEMINI_PRO_API_KEY=...    # For reasoning agents
-MINIMAX_IMAGE_API_KEY=... # For image generation
-MINIMAX_VIDEO_API_KEY=... # For video generation
-```
+### 8. Kling API Integration
+- Video generation uses JWT auth (access_key + secret_key)
+- `image_list` with `type: "first_frame"` for starting frame reference
+- Prompt uses `<<<image_1>>>` token to reference the uploaded image
+- `duration` of 5 or 10 seconds
+- Async task creation → polling → download
 
-### 5. Project Path Migration
-
-**Problem:** Old code used `memory/`, `input/`, `shared/` paths.
-
-**Solution:** New structure uses:
-- `src/` - Source materials (was `input/`)
-- `index/` - Chapter index (was `memory/`)
-- `assets/` - Generated assets (was `shared/`)
-- `scenes/` - Scene organization (new)
-
-### 6. Agent Organization
-
-**Problem:** Monolithic agent files become unmaintainable.
-
-**Solution:** One agent per file:
-```
-src/agents/
-├── indexer.py          # Text segmentation
-├── lore_master.py      # Entity extraction
-├── screenwriter.py     # Scene chunking
-├── director.py         # Shot generation
-├── storyboarder.py     # Keyframe generation
-├── animator.py         # Video generation
-├── qa_linter.py        # Quality assurance
-└── compositor.py       # Final assembly
-```
-
-### 7. Testing Strategy
-
-**Problem:** Full pipeline tests are slow and expensive.
-
-**Solution:** 
-- Use short test novels (3 chapters max)
-- Test agents individually
-- Mock provider responses for unit tests
-- Integration tests only for critical paths
+### 9. Editor Scale/Pad
+Resolution mismatches between shots are handled by the Editor via FFmpeg scale+pad filters rather than failing the assembly.
 
 ## Checklist for New Agents
 
 - [ ] Create `src/agents/{agent_name}.py`
-- [ ] Import from `src.agents.utils` for providers
-- [ ] Define JSON schema in `src/schemas.py` if needed
-- [ ] Use `generate_structured()` for LLM calls
+- [ ] Define agent class extending `BaseCreative`, `BaseQA`, `BaseExecutor`, or `BaseOrchestrator`
+- [ ] Create node function (`{agent_name}_node(state: AFCState) -> Dict`)
+- [ ] Add detailed logging with emoji prefix and NODE ENTRY/EXIT markers
+- [ ] Handle `is_continuation` flag if processing shots
+- [ ] Use `generate_structured()` for LLM calls with Gemini-compatible schemas
 - [ ] Add progress reporting for loops
-- [ ] Handle exceptions and set `state["last_error"]`
-- [ ] Update `src/core/graph.py` if adding to workflow
-- [ ] Add CLI command in `main.py` if standalone
-- [ ] Update `DESIGN.md` with agent description
-- [ ] Test with short novel
-
-## Example: Complete Agent Implementation
-
-```python
-# src/agents/my_agent.py
-from src.pipeline.state import PipelineState, SomeIR
-from src.schemas import MY_SCHEMA
-from src.agents.utils import get_llm_provider, get_chapter_db
-
-
-def my_agent(state: PipelineState) -> PipelineState:
-    print("--- MY AGENT: Description ---")
-    
-    provider = get_llm_provider(state, "my_agent")
-    chapter_db = get_chapter_db(state)
-    
-    if chapter_db and len(chapter_db.chapters) > 0:
-        all_results = []
-        chapters = chapter_db.get_all_chapters()
-        total = len(chapters)
-        
-        for i, chapter in enumerate(chapters, 1):
-            progress = (i / total) * 100
-            print(f"    [{i}/{total} {progress:.1f}%] {chapter.id}...")
-            
-            try:
-                result = provider.generate_structured(
-                    prompt=build_prompt(chapter),
-                    response_schema=MY_SCHEMA
-                )
-                all_results.extend(result)
-            except Exception as e:
-                print(f"      Error: {e}")
-                continue
-        
-        state["my_results"] = [SomeIR(**r) for r in all_results]
-        print(f"  Processed {len(all_results)} items")
-    else:
-        # Fallback to novel_text
-        try:
-            result = provider.generate_structured(
-                prompt=build_prompt_from_text(state["novel_text"]),
-                response_schema=MY_SCHEMA
-            )
-            state["my_results"] = [SomeIR(**r) for r in result]
-        except Exception as e:
-            print(f"Error: {e}")
-            state["last_error"] = str(e)
-    
-    return state
-
-
-def build_prompt(chapter) -> str:
-    return f"""Process this chapter:
-Title: {chapter.metadata.chapter_title}
-Text: {chapter.text[:3000]}
-"""
-
-
-def build_prompt_from_text(text: str) -> str:
-    return f"Process this text: {text[:5000]}"
-```
+- [ ] Handle exceptions gracefully
+- [ ] Register node in `src/pipeline/graph.py`
+- [ ] Add agent config in `config.yaml.template`
+- [ ] Update DESIGN.md with agent description
 
 ## Resources
 
-- **State Definition:** `src/core/state.py`
+- **State Definition:** `src/pipeline/state.py`
 - **JSON Schemas:** `src/schemas.py`
-- **Agent Utilities:** `src/agents/utils.py`
+- **Agent Base Classes:** `src/agents/base.py`
 - **Provider Base:** `src/providers/base.py`
-- **Project Manager:** `src/core/project.py`
+- **Workspace:** `src/pipeline/workspace.py`
+- **Graph:** `src/pipeline/graph.py`
+- **Config Template:** `config.yaml.template`

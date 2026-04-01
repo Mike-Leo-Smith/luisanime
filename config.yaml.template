@@ -18,25 +18,31 @@ generation:
 models:
   gemini-flash:
     provider: "gemini"
-    model: "gemini-2.0-flash"
+    model: "gemini-3.1-pro-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
 
   gemini-pro:
     provider: "gemini"
-    model: "gemini-2.0-pro"
+    model: "gemini-3.1-pro-preview"
     api_key: "ENV:GEMINI_PRO_API_KEY"
     temperature: 0.2
 
   gemini-image:
     provider: "gemini"
-    model: "gemini-2.0-flash-image"
+    model: "gemini-3.1-flash-image-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
 
   minimax-video:
     provider: "minimax"
     model: "MiniMax-Hailuo-2.3"
     api_key: "ENV:MINIMAX_VIDEO_API_KEY"
+
+  kling-video:
+    provider: "kling"
+    model: "kling-v3-omni"
+    api_key: "ENV:KLING_ACCESS_KEY"
+    secret_key: "ENV:KLING_SECRET_KEY"
 
 # Per-agent configurations
 agents:
@@ -56,7 +62,7 @@ agents:
     image: gemini-image
   lead_animator:
     llm: gemini-flash
-    video: minimax-video
+    video: kling-video
   continuity_supervisor:
     llm: gemini-pro
   editor:
@@ -65,7 +71,7 @@ agents:
 style_presets:
   anime:
     prompt_prefix: "Studio Ghibli 2D manga style, hand-drawn aesthetic, high-quality traditional animation."
-    prompt_suffix: "Vibrant but natural colors, lush painterly backgrounds, soft cinematic lighting, clean line art, nostalgic atmosphere, whimsical details, Joe Hisaishi movie vibe, 2D cell shaded."
+    prompt_suffix: "Vibrant but natural colors, lush painterly backgrounds, soft cinematic lighting, clean line art, nostalgic atmosphere, whimsical details, Joe Hisaishi movie vibe, 2D cell shaded. No text, no subtitles, no dialogue bubbles, no captions, no watermarks."
   cinematic:
     prompt_prefix: "Cinematic 35mm film style, photorealistic, highly detailed."
-    prompt_suffix: "Dramatic lighting, deep shadows, rich textures, professional color grading, anamorphic lens flares, slight film grain, epic composition."
+    prompt_suffix: "Dramatic lighting, deep shadows, rich textures, professional color grading, anamorphic lens flares, slight film grain, epic composition. No text, no subtitles, no dialogue bubbles, no captions, no watermarks."

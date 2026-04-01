@@ -2,6 +2,8 @@ import json
 import base64
 import time
 import hashlib
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from google import genai
@@ -101,7 +103,22 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             mime_type = "image/jpeg"
 
         print(f"  [GeminiProvider] Uploading {path.name} ({mime_type})...")
-        file = self.client.files.upload(file=str(path))
+        # google-genai SDK passes filename in HTTP headers, which httpx requires
+        # to be ASCII-encodable. Use a temp copy with ASCII name for non-ASCII filenames.
+        upload_path = path
+        tmp_copy = None
+        try:
+            path.name.encode("ascii")
+        except UnicodeEncodeError:
+            tmp_copy = Path(tempfile.mktemp(suffix=path.suffix))
+            shutil.copy2(path, tmp_copy)
+            upload_path = tmp_copy
+
+        try:
+            file = self.client.files.upload(file=str(upload_path))
+        finally:
+            if tmp_copy and tmp_copy.exists():
+                tmp_copy.unlink()
 
         # Robust polling for Video/Large images
         if mime_type.startswith("video") or path.stat().st_size > 10 * 1024 * 1024:
@@ -275,6 +292,12 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
 
         image_cost = 0.02
         for candidate in response.candidates:
+            if not candidate.content or not candidate.content.parts:
+                finish_reason = getattr(candidate, "finish_reason", "unknown")
+                print(
+                    f"  [GeminiProvider] Candidate has no content (finish_reason={finish_reason}), skipping"
+                )
+                continue
             for part in candidate.content.parts:
                 if part.inline_data and part.inline_data.mime_type.startswith("image/"):
                     return ImageResponse(
@@ -284,7 +307,9 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
                         model=self.image_model,
                         cost_usd=image_cost,
                     )
-        raise ValueError(f"No image part found in {self.image_model} response")
+        raise ValueError(
+            f"No image part found in {self.image_model} response. Check if prompt triggered safety filters."
+        )
 
     def analyze_image(
         self, image_path: str, prompt: str, config: Optional[GenerationConfig] = None

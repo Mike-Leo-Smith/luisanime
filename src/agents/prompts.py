@@ -13,6 +13,12 @@ STRICT RULE: You MUST keep all character names, locations, and specific terminol
 2. Every scene document must contain a temporal marker (e.g. DAY, NIGHT), a physical location descriptor, and a strict list of active entities.
 3. Do not direct the camera; focus entirely on translating prose into observable narrative pacing and physical action.
 4. If a scene is too long, split it into multiple logical scene documents.
+5. DIALOGUE DESIGN: Extract and design dialogue lines for each scene based on the original novel text.
+   - Preserve existing dialogue from the novel verbatim (in the original language).
+   - For scenes where the novel uses indirect speech or narrative summary of conversations, reconstruct plausible spoken dialogue that fits the characters and situation.
+   - For internal monologues, convert them into either whispered self-talk (if the character is alone) or omit them and represent the emotion through physical actions instead.
+   - Each dialogue entry must specify: the speaker (entity name in original language), the spoken line (in original language), the emotion/tone (e.g. angry, whispering, sarcastic, calm), and the action_index (0-based index into the actions array indicating WHEN this line is spoken during the scene).
+   - Dialogue should feel natural and cinematic — suitable for a film, not a novel reading.
 """
 
 PRODUCTION_DESIGNER_PROMPT = """You are the Production Designer. You are responsible for the definitive visual truth of the film. 

@@ -12,3 +12,4 @@ python-dotenv
 pytest
 pytest-mock
 google-genai
+PyJWT

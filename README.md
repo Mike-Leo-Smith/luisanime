@@ -1,24 +1,26 @@
 # Agentic Filming Pipeline (AFP) - Autonomous Film Crew (AFC)
 
-The **Agentic Filming Pipeline (AFP)** is a state-of-the-art, automated system designed to transcode long-form textual novels into broadcast-quality animated video sequences using an **Autonomous Film Crew (AFC)** architecture.
+The **Agentic Filming Pipeline (AFP)** is an end-to-end automated system that transcodes long-form textual novels into broadcast-quality video sequences using an **Autonomous Film Crew (AFC)** architecture.
 
 By modeling the process after modern compiler infrastructures and physically-based rendering pipelines, AFP abstracts the unpredictable nature of generative AI behind strict state machines, Intermediate Representations (IR), and automated visual linters. The system uses a **LangGraph-based workflow** where specialized AI agents collaborate as a film production crew.
 
 ## Key Features
 - **Autonomous Film Crew Architecture**: 9 specialized agents collaborate via LangGraph state machine
+- **Shot Continuation Detection**: Director pre-marks continuation shots; pipeline reuses the last video frame as the starting keyframe for seamless transitions
 - **Per-Agent Configuration**: Each AI agent has independent provider, model, and API key settings
-- **Multi-Provider Support**: Unified interface for Gemini and MiniMax APIs
+- **Multi-Provider Support**: Unified interface for Gemini (LLM + Image), Kling (Video), and MiniMax (Video)
 - **Scene-Based Production**: Novels are broken into scenes, then shots, with full continuity management
-- **Quality Assurance Loops**: Automated VLM inspection with retry logic and circuit breakers
+- **Quality Assurance Loops**: VLM-based keyframe inspection with retry logic, best-of-N fallback, and circuit breakers
+- **No-Text Enforcement**: Style presets enforce zero on-screen text, subtitles, or dialogue bubbles in all generated media
+- **Location & Character Design**: Production Designer generates reference images for locations and characters to maintain visual consistency
 - **Budget Management**: Built-in cost tracking with automatic production halt on budget exceedance
-- **Resumable Pipeline**: State-based architecture supports checkpointing and recovery
 
 ## Tech Stack
 - **Orchestration**: LangGraph (Python) with cyclic workflow graphs
-- **Logic/Reasoning**: Gemini 1.5 Pro / Flash
-- **Vision QA**: Gemini 1.5 Pro (Keyframe + Render QA)
-- **Image Generation**: Gemini Image API
-- **Video Generation**: MiniMax Hailuo-2.3
+- **Logic/Reasoning**: Gemini 3.1 Pro
+- **Vision QA**: Gemini 3.1 Pro (keyframe inspection)
+- **Image Generation**: Gemini 3.1 Flash Image Preview
+- **Video Generation**: Kling v3-omni (via JWT-authenticated API)
 - **State Management**: Pydantic TypedDict with annotation-based merging
 
 ## Documentation
@@ -42,20 +44,11 @@ pip install -r requirements.txt
 
 Create a `.env` file in the project root:
 
-```bash
-# Gemini agents (showrunner, screenwriter, production_designer, director, etc.)
-export GEMINI_FLASH_API_KEY="your_gemini_api_key"
-export GEMINI_PRO_API_KEY="your_gemini_api_key"
-
-# MiniMax agents (lead_animator)
-export MINIMAX_VIDEO_API_KEY="your_minimax_api_key"
-```
-
-Or create a `.env` file:
 ```
 GEMINI_FLASH_API_KEY=your_gemini_api_key
 GEMINI_PRO_API_KEY=your_gemini_api_key
-MINIMAX_VIDEO_API_KEY=your_minimax_api_key
+KLING_ACCESS_KEY=your_kling_access_key
+KLING_SECRET_KEY=your_kling_secret_key
 ```
 
 #### Customize Configuration (Optional)
@@ -64,162 +57,113 @@ Edit `config.yaml.template` to customize:
 - Video style, resolution, FPS
 - Agent models and parameters
 - Project budget and retry settings
-- Style presets for prompts
+- Style presets (anime, cinematic) with no-text enforcement
 
 ### 3. Create a Project
 
 ```bash
-python main.py create my_video_project novel.txt --style anime --max-shots 10
+python main.py create my_project novel.txt --style cinematic --max-shots 20
 ```
 
 This creates a project directory with:
 ```
-projects/my_video_project/
+projects/my_project/
 ├── 00_project_config/
-│   └── config.yaml          # Project configuration
+│   └── config.yaml
 ├── 01_source_material/
-│   └── novel.txt            # Source novel
-├── 02_screenplays/          # Scene scripts (JSON)
-├── 03_lore_bible/           # Character/style documentation
-├── 04_production_slate/     # Shot plans and keyframes
+│   └── novel.txt
+├── 02_screenplays/           # Scene scripts (JSON)
+├── 03_lore_bible/            # Character sheets, style guides, location designs
+│   └── designs/
+│       └── locations/
+├── 04_production_slate/      # Shot execution plans
 │   └── shots/
-├── 05_dailies/              # Generated video clips
-├── 06_logs/                 # Production logs
-└── config.yaml              # Legacy config (symlink)
+├── 05_dailies/               # Generated keyframes and video clips
+├── 06_logs/                  # Production logs and QA reports
+└── config.yaml
 ```
 
 ### 4. Run the Pipeline
 
 ```bash
 # Run the full autonomous pipeline
-python main.py run my_video_project
+python main.py run my_project
 
 # Check project status
-python main.py status my_video_project
+python main.py status my_project
 ```
 
 The pipeline automatically executes the full workflow:
 1. **Screenwriter** → Parses novel into scenes
-2. **Showrunner** → Orchestrates scene-by-scene production
-3. **Director** → Breaks scenes into shots with continuity
-4. **Script Coordinator** → Manages shot queue
-5. **Production Designer** → Establishes visual style
-6. **Cinematographer** → Generates keyframes
-7. **Continuity Supervisor** → QA on keyframes
-8. **Lead Animator** → Generates video from keyframes
-9. **Editor** → Assembles final video
+2. **Showrunner** → Orchestrates scene-by-scene production, audits budget
+3. **Director** → Breaks scenes into shots with continuity and continuation marking
+4. **Script Coordinator** → Manages shot queue, tracks character state
+5. **Production Designer** → Generates master style, character designs, and location designs
+6. **Cinematographer** → Generates starting-frame keyframes (or extracts last frame for continuation shots)
+7. **Continuity Supervisor** → VLM-based QA on keyframes (auto-passes continuation keyframes)
+8. **Lead Animator** → Generates video via Kling API (continuation mode merges action descriptions)
+9. **Editor** → Assembles per-scene preview videos and final output
 
 ## Architecture Overview
 
 ### The Film Crew (Agents)
 
-The AFC consists of 9 specialized agents orchestrated by LangGraph:
+| Agent | Role | Providers | Responsibility |
+|-------|------|-----------|----------------|
+| **Screenwriter** | Creative | Gemini 3.1 Pro | Parses novel text into structured scene documents |
+| **Showrunner** | Orchestrator | Gemini 3.1 Pro | Routes workflow, manages budget, audits costs |
+| **Director** | Creative | Gemini 3.1 Pro | Generates shot plans with continuity and `is_continuation` marking |
+| **Script Coordinator** | Support | Gemini 3.1 Pro | Manages shot queue, tracks per-character state mutations |
+| **Production Designer** | Creative | Gemini 3.1 Pro + Gemini Image | Generates master style, character design sheets, location reference images |
+| **Cinematographer** | Creative | Gemini 3.1 Pro + Gemini Image | Generates starting-frame keyframes with design/location references |
+| **Continuity Supervisor** | QA | Gemini 3.1 Pro | VLM-based keyframe QA with best-of-N fallback |
+| **Lead Animator** | Creative | Gemini 3.1 Pro + Kling | Generates video from approved keyframes via Kling v3-omni |
+| **Editor** | Support | FFmpeg | Assembles per-scene master videos with scale/pad normalization |
 
-| Agent | Role | Provider | Responsibility |
-|-------|------|----------|----------------|
-| **Screenwriter** | Creative | Gemini Flash | Parses novel text into structured scene documents |
-| **Showrunner** | Orchestrator | Gemini Flash | Routes workflow, manages budget, audits costs |
-| **Director** | Creative | Gemini Flash | Generates shot plans with cinematic continuity |
-| **Script Coordinator** | Support | Gemini Flash | Manages shot queue, determines next actions |
-| **Production Designer** | Creative | Gemini Flash + Image | Establishes visual style and references |
-| **Cinematographer** | Creative | Gemini Flash + Image | Generates keyframes from shot plans |
-| **Continuity Supervisor** | QA | Gemini Pro | VLM-based QA on keyframes and renders |
-| **Lead Animator** | Creative | Gemini Flash + MiniMax | Generates video from approved keyframes |
-| **Editor** | Support | Gemini Flash | Assembles scenes into final deliverable |
+### Shot Continuation
+
+The Director pre-marks shots with `is_continuation=True` when consecutive shots form a continuous motion. For continuation shots:
+- **Cinematographer**: Extracts the last frame from the previous video as `keyframe_v1.png`
+- **Continuity Supervisor**: Auto-passes (no QA needed since the frame comes from an approved video)
+- **Lead Animator**: Uses `generate_video_continuation()` with the last frame as `first_frame` and a merged action description
 
 ### Provider Abstraction
 
-The system uses a provider abstraction layer to support multiple AI backends:
-
-```python
-from src.providers.factory import ProviderFactory
-from src.config import load_config, ConfigLoader
-
-config = load_config()
-agent_cfg = ConfigLoader.get_agent_config(config, "director")
-
-# Creates the appropriate provider automatically
-llm = ProviderFactory.create_llm(agent_cfg)
-```
-
 Supported providers:
-- **Gemini** - LLM and image generation
-- **MiniMax** - Video generation
-
-### Project Structure
-
-```
-project/
-├── 00_project_config/       # Configuration
-│   └── config.yaml
-├── 01_source_material/      # Source novel
-│   └── novel.txt
-├── 02_screenplays/          # Scene scripts (JSON)
-│   └── scene_001.json
-├── 03_lore_bible/           # Style guides, character sheets
-├── 04_production_slate/     # Shot plans, keyframes
-│   └── shots/
-│       ├── S1_SHOT_001.json
-│       └── S1_SHOT_002.json
-├── 05_dailies/              # Generated video clips
-├── 06_logs/                 # Production logs
-└── config.yaml              # Legacy config
-```
+- **Gemini** — LLM (text generation, structured JSON output, vision analysis) and image generation
+- **Kling** — Video generation via JWT-authenticated REST API with task polling
+- **MiniMax** — Alternative video generation backend
 
 ### LangGraph Workflow
 
-The pipeline uses a cyclic graph with conditional routing:
-
 ```
 START → Screenwriter → Showrunner → Director → Script Coordinator
-                                           ↓
+                                                       ↓
 Editor ← Continuity Supervisor ← Lead Animator ← Cinematographer ← Production Designer
-  ↑                                              ↓
-  └──────────────────────────────────────────────┘ (retry loops)
+  ↑              ↓ (fail)                                  ↑
+  │        Cinematographer (retry, up to 3×)               │
+  └────────────── Script Coordinator (next shot) ──────────┘
 ```
-
-Key routing decisions:
-- **Showrunner** → Routes to Director or END based on remaining scenes
-- **Script Coordinator** → Enters micro-loop or finishes scene
-- **Continuity Supervisor** → Approves, retries, or escalates (circuit breaker)
 
 ## Configuration Reference
 
-### Video Settings
+### Models
 
 ```yaml
-video:
-  style: "anime"              # anime, cinematic
-  resolution: "1080p"         # 1080p, 720p, 360p
-  fps: 24
-  aspect_ratio: "16:9"
-```
-
-### Generation Settings
-
-```yaml
-generation:
-  project_budget_usd: 100.0   # Max budget in USD
-  max_retries_per_shot: 3     # Auto-retry on failure
-  enable_vlm_qa: true         # Enable visual QA
-```
-
-### Agent Configuration
-
-```yaml
-agents:
-  showrunner:
-    llm: gemini-flash
-  director:
-    llm: gemini-flash
-  cinematographer:
-    llm: gemini-flash
-    image: gemini-image
-  lead_animator:
-    llm: gemini-flash
-    video: minimax-video
-  continuity_supervisor:
-    llm: gemini-pro
+models:
+  gemini-flash:
+    provider: "gemini"
+    model: "gemini-3.1-pro-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
+  gemini-image:
+    provider: "gemini"
+    model: "gemini-3.1-flash-image-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
+  kling-video:
+    provider: "kling"
+    model: "kling-v3-omni"
+    api_key: "ENV:KLING_ACCESS_KEY"
+    secret_key: "ENV:KLING_SECRET_KEY"
 ```
 
 ### Style Presets
@@ -227,43 +171,26 @@ agents:
 ```yaml
 style_presets:
   anime:
-    prompt_prefix: "Studio Ghibli 2D manga style..."
-    prompt_suffix: "Vibrant but natural colors..."
+    prompt_prefix: "Studio Ghibli 2D manga style, hand-drawn aesthetic, high-quality traditional animation."
+    prompt_suffix: "Vibrant but natural colors... No text, no subtitles, no dialogue bubbles, no captions, no watermarks."
   cinematic:
-    prompt_prefix: "Cinematic 35mm film style..."
-    prompt_suffix: "Dramatic lighting, deep shadows..."
-```
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test
-pytest tests/test_director.py
-
-# Run with coverage
-pytest --cov=src tests/
+    prompt_prefix: "Cinematic 35mm film style, photorealistic, highly detailed."
+    prompt_suffix: "Dramatic lighting, deep shadows... No text, no subtitles, no dialogue bubbles, no captions, no watermarks."
 ```
 
 ## Troubleshooting
 
 ### Missing API Keys
-If you see `MISSING_ENV_XXX`, ensure the corresponding environment variable is set.
+If you see `MISSING_ENV_XXX`, set the corresponding environment variable in `.env`.
 
-### Provider Errors
-Check that the model names in `config.yaml` match the provider's available models.
+### Keyframe QA Failures
+If a shot fails keyframe QA 3 times, the Continuity Supervisor selects the best candidate via best-of-N comparison rather than blocking the pipeline.
+
+### Mirror Reflection False Positives
+The QA agent is instructed to not flag laterally inverted details in mirror reflections as inconsistencies.
 
 ### Budget Exceeded
-The pipeline automatically halts when the budget is exceeded. Check `06_logs/` for cost tracking.
-
-### Continuity Failures
-If shots fail QA repeatedly, the circuit breaker triggers and escalates to the Director for prompt simplification.
-
-## License
-
-[Your License Here]
+The Showrunner halts production when the budget is exceeded. Check `06_logs/` for cost details.
 
 ---
 *Built for the next generation of automated storytelling.*

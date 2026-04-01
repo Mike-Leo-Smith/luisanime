@@ -2,108 +2,105 @@
 
 ## 1. Executive Summary & Engineering Philosophy
 
-The Agentic Filming Pipeline (AFP) is an end-to-end, automated system designed to transcode long-form textual novels into broadcast-quality animated video sequences using an **Autonomous Film Crew (AFC)** architecture.
+The Agentic Filming Pipeline (AFP) is an end-to-end automated system designed to transcode long-form textual novels into broadcast-quality video sequences using an **Autonomous Film Crew (AFC)** architecture.
 
 To mitigate the inherent flaws of current Video Diffusion Models (e.g., topological collapse, temporal inconsistency, physical hallucinations), the AFP is explicitly modeled after modern compiler infrastructures and physically-based rendering pipelines. It abstracts the unpredictable nature of generative AI behind strict state machines, Intermediate Representations (IR), and automated visual linters.
 
-The system adheres to six engineering principles:
+The system adheres to these engineering principles:
 1. **Autonomous Film Crew**: Specialized AI agents collaborate via LangGraph, each with a specific production role
 2. **Frontend/Backend Decoupling**: LLMs act as the "Compiler Frontend" to parse text and generate structured ASTs (Shot Lists). Video APIs act as the "Rasterization Backend."
-3. **Defensive Generation via QA Linters**: No video clip is accepted blindly. Every generated sequence passes through Vision-Language Model (VLM) inspection with retry loops and circuit breakers.
-4. **Budget Management**: Built-in cost tracking with automatic production halt when budget is exceeded.
-5. **Per-Agent Configuration**: Each agent has independent configuration for provider, model, API key, and parameters.
-6. **Scene-Based Continuity**: Cinematic continuity is maintained through explicit shot-to-shot linkage in the Director's shot plans.
+3. **Defensive Generation via QA Linters**: Every generated keyframe passes through VLM inspection with retry loops, best-of-N fallback, and circuit breakers.
+4. **Shot Continuation**: The Director pre-marks continuation shots at planning time. The pipeline reuses the last video frame as the starting keyframe, bypasses QA, and merges action descriptions for seamless transitions.
+5. **Budget Management**: Built-in cost tracking with automatic production halt when budget is exceeded.
+6. **Per-Agent Configuration**: Each agent has independent configuration for provider, model, API key, and parameters.
+7. **No-Text Enforcement**: All generation prompts enforce zero on-screen text, subtitles, dialogue bubbles, or watermarks.
 
 ---
 
 ## 2. System Architecture: The Three Planes
 
-The system is partitioned into three distinct operational planes orchestrated by a LangGraph runtime environment.
-
 ### 2.1 Control Plane (LangGraph Orchestration)
 * **Engine**: LangGraph with cyclic workflow graphs. Handles state transitions, conditional routing, and fault tolerance.
 * **State Management**: TypedDict with annotation-based merging (`AFCState`).
 * **Configuration**: Per-project `config.yaml` with agent-specific settings.
-* **Role**: The central bus. Routes data between agents via conditional edges and manages the macro/micro production loops.
 
 ### 2.2 Generation Plane (Cloud API Backend)
-* **LLM Inference**: Top-tier reasoning models for high-fidelity logic, spatial decomposition, and JSON compliance.
-* **Image/Video APIs**: Commercial endpoints for pixel rasterization.
-* **Provider Abstraction**: Unified interface for Gemini (LLM + Image) and MiniMax (Video).
-* **Role**: Heavy compute execution. Subject to strict budget control and circuit breakers.
+* **LLM Inference**: Gemini 3.1 Pro for reasoning, JSON structured output, and vision analysis.
+* **Image Generation**: Gemini 3.1 Flash Image Preview for keyframes, character designs, and location designs.
+* **Video Generation**: Kling v3-omni via JWT-authenticated REST API with async task polling.
+* **Provider Abstraction**: Unified interface for Gemini, Kling, and MiniMax.
 
-### 2.3 Post-Processing Plane (Local CPU/GPU)
-* **Asset Assembly**: Local Python scripts for scene assembly and final output generation.
-* **Compositing**: FFmpeg for timeline assembly and audio multiplexing.
+### 2.3 Post-Processing Plane (Local CPU)
+* **Scene Assembly**: Editor concatenates all shots per scene into preview videos.
+* **Compositing**: FFmpeg for timeline assembly with scale/pad normalization for resolution mismatches.
 
 ---
 
 ## 3. Provider Abstraction Layer
 
-The system uses a provider abstraction layer to support multiple AI service backends without coupling to specific APIs.
-
 ### 3.1 Base Classes
 
 ```python
-# Base provider interfaces
-BaseLLMProvider      - Text generation and JSON structured output
-BaseImageProvider    - Image generation
-BaseVideoProvider    - Video generation with polling
+BaseLLMProvider      # Text generation, JSON structured output, vision (image/video) analysis
+BaseImageProvider    # Image generation
+BaseVideoProvider    # Video generation with async polling
 ```
 
 ### 3.2 Provider Implementations
 
-| Provider | LLM | Image | Video | Configuration |
-|----------|-----|-------|-------|---------------|
-| **Gemini** | ✅ | ✅ | ❌ | `model`, `image_model`, `api_key` |
-| **MiniMax** | ❌ | ❌ | ✅ | `video_model`, `api_key` |
+| Provider | LLM | Image | Video | Authentication |
+|----------|-----|-------|-------|----------------|
+| **Gemini** | ✅ | ✅ | ❌ | API key |
+| **Kling** | ❌ | ❌ | ✅ | JWT (access_key + secret_key) |
+| **MiniMax** | ❌ | ❌ | ✅ | API key |
 
 ### 3.3 Provider Factory
 
-Providers are instantiated via `ProviderFactory` which reads configuration and creates the appropriate provider:
-
 ```python
 from src.providers.factory import ProviderFactory
-from src.config import load_config, ConfigLoader
-
-config = load_config()
-agent_cfg = ConfigLoader.get_agent_config(config, "cinematographer")
 
 llm_provider = ProviderFactory.create_llm(agent_cfg)
 image_provider = ProviderFactory.create_image(agent_cfg)
 video_provider = ProviderFactory.create_video(agent_cfg)
 ```
 
+### 3.4 Kling Video Provider
+
+The Kling provider uses JWT authentication:
+- Generates JWT tokens from `access_key` and `secret_key`
+- Creates video generation tasks via REST API
+- Polls task status until completion
+- Downloads and returns video bytes
+- Supports `first_frame` image reference via `image_list` parameter with `<<<image_1>>>` prompt token
+
 ---
 
 ## 4. State Management & The AFCState
-
-The pipeline uses a centralized state object (`AFCState`) that all agents read from and write to:
 
 ```python
 class AFCState(TypedDict):
     workspace_root: str
     project_config: Dict[str, Any]
-    ledger: FinancialLedger           # Budget tracking
+    ledger: FinancialLedger
     novel_text: str
-    
+
     # Macro Queue (Scenes)
-    unprocessed_scenes: List[str]     # Scene file paths
+    unprocessed_scenes: List[str]
     current_scene_path: Optional[str]
-    
+
     # Micro Queue (Shots)
     unprocessed_shots: List[ShotExecutionPlan]
     active_shot_plan: Optional[ShotExecutionPlan]
-    
+
     # Media State (Active Shot)
     current_proxy_path: Optional[str]
     current_keyframe_path: Optional[str]
     current_render_path: Optional[str]
-    
+
     # Asset Assembly
     scene_dailies_paths: List[str]
     completed_scenes_paths: List[str]
-    
+
     # Feedback & Escalation
     previs_retry_count: int
     render_retry_count: int
@@ -117,95 +114,92 @@ The core IR for shot generation:
 
 ```python
 class ShotExecutionPlan(BaseModel):
-    shot_id: str
+    shot_id: str                          # e.g., "scene_01_SHOT_001"
     target_duration_ms: int
-    camera_movement: str
-    detailed_camera_plan: str
+    camera_movement: str                  # High-level tag
+    detailed_camera_plan: str             # Detailed movement instructions
     action_description: str
     active_entities: List[str]
-    staging_description: str
-    character_poses: Dict[str, str]
-    setting_details: str
+    staging_description: str              # Character positions, environmental layout
+    character_poses: Dict[str, str]       # entity_id → specific pose/expression
+    setting_details: str                  # Period-accurate details, lighting cues
     era_context: str
-    ending_composition_description: str  # For continuity
+    ending_composition_description: str   # For continuity linkage to next shot
+    is_continuation: bool = False         # True if this shot continues from previous shot's motion
 ```
 
-### 4.2 Budget Management
+### 4.2 Shot ID Format
 
-Each agent call tracks costs in the `FinancialLedger`:
-
-```python
-class FinancialLedger(BaseModel):
-    project_budget_usd: float = 100.0
-    accumulated_cost_usd: float = 0.0
-```
-
-The Showrunner audits costs and halts production if the budget is exceeded.
+Shot IDs follow the pattern `{scene_id}_SHOT_{index:03d}`:
+- `scene_01_SHOT_001`, `scene_01_SHOT_002`, etc.
+- Deterministically assigned by the Director (overrides LLM output)
+- Scene IDs are normalized to `scene_{n:02d}` by the Screenwriter
 
 ---
 
-## 5. Project Structure & Asset Organization
-
-### 5.1 Project Layout
+## 5. Project Structure
 
 ```
 projects/{project_name}/
-├── 00_project_config/         # Configuration
+├── 00_project_config/
 │   └── config.yaml
-├── 01_source_material/        # Source novel
+├── 01_source_material/
 │   └── novel.txt
-├── 02_screenplays/            # Scene scripts (JSON)
-│   └── scene_001.json
-│   └── scene_002.json
-├── 03_lore_bible/             # Character sheets, style guides
-│   └── master_style.md
-├── 04_production_slate/       # Shot plans and keyframes
+├── 02_screenplays/
+│   ├── scene_01.json
+│   ├── scene_02.json
+│   └── scene_03.json
+├── 03_lore_bible/
+│   ├── master_style.md
+│   ├── {entity_id}.md
+│   └── designs/
+│       ├── {entity_id}.png
+│       ├── {entity_id}.png.prompt.txt
+│       └── locations/
+│           ├── {location_name}.png
+│           └── {location_name}.png.prompt.txt
+├── 04_production_slate/
 │   └── shots/
-│       ├── S1_SHOT_001.json
-│       ├── S1_SHOT_002.json
-│       └── keyframes/
-├── 05_dailies/                # Generated video clips
-│   └── scene_001/
-│       └── S1_SHOT_001.mp4
-├── 06_logs/                   # Production logs
-└── config.yaml                # Legacy config
-```
-
-### 5.2 Project Manager
-
-The `ProjectManager` handles asset paths and organization:
-
-```python
-from src.pipeline.project import ProjectManager
-
-pm = ProjectManager("./projects")
-pm.create_project("my_project", novel_text, config)
-pm.load_project("my_project")
-
-# Access paths
-novel_path = pm.get_path("01_source_material", "novel.txt")
-config_path = pm.get_path("00_project_config", "config.yaml")
+│       ├── scene_01_SHOT_001.json
+│       ├── scene_01_SHOT_002.json
+│       └── ...
+├── 05_dailies/
+│   ├── scene_01_SHOT_001/
+│   │   ├── keyframe_v1.png
+│   │   ├── keyframe_v1.png.prompt.txt
+│   │   ├── render.mp4
+│   │   └── render.mp4.prompt.txt
+│   ├── scene_01_SHOT_002/
+│   │   ├── keyframe_v1.png           # For continuation shots: extracted last frame
+│   │   ├── continuity/               # Reference frames from previous video
+│   │   │   ├── ref_0.png
+│   │   │   ├── ref_1.png
+│   │   │   └── ref_2.png
+│   │   └── render.mp4
+│   └── scene_01_master.mp4           # Per-scene assembled preview
+├── 06_logs/
+│   ├── generation_prompts.log
+│   └── qa_reports.log
+└── config.yaml
 ```
 
 ---
 
 ## 6. Agent Topology & Workflow (LangGraph)
 
-The pipeline uses a LangGraph state machine with 9 specialized agents:
-
 ### 6.1 Agent Registry
 
-| Node | Agent Class | Type | Description |
-|------|-------------|------|-------------|
-| `screenwriter` | ScreenwriterAgent | Creative | Parses novel into structured scenes |
-| `showrunner` | ShowrunnerAgent | Orchestrator | Routes workflow, audits budget |
-| `director` | DirectorAgent | Creative | Generates shot plans with continuity |
-| `script_coordinator` | ScriptCoordinatorAgent | Support | Manages shot queue |
-| `production_designer` | ProductionDesignerAgent | Creative | Establishes visual style |
-| `cinematographer` | CinematographerAgent | Creative | Generates keyframes |
-| `continuity_supervisor` | ContinuitySupervisorAgent | QA | VLM-based quality assurance |
-| `lead_animator` | LeadAnimatorAgent | Creative | Generates video from keyframes |
-| `editor` | EditorAgent | Support | Assembles final video |
+| Node | Agent Class | Type | Providers |
+|------|-------------|------|-----------|
+| `screenwriter` | ScreenwriterAgent | Creative | Gemini LLM |
+| `showrunner` | ShowrunnerAgent | Orchestrator | Gemini LLM |
+| `director` | DirectorAgent | Creative | Gemini LLM |
+| `script_coordinator` | ScriptCoordinatorAgent | Support | Gemini LLM |
+| `production_designer` | ProductionDesignerAgent | Creative | Gemini LLM + Image |
+| `cinematographer` | CinematographerAgent | Creative | Gemini LLM + Image |
+| `continuity_supervisor` | ContinuitySupervisorAgent | QA | Gemini LLM (Vision) |
+| `lead_animator` | LeadAnimatorAgent | Creative | Gemini LLM + Kling Video |
+| `editor` | EditorAgent | Support | FFmpeg |
 
 ### 6.2 Graph Topology
 
@@ -215,92 +209,74 @@ The pipeline uses a LangGraph state machine with 9 specialized agents:
                     ▼                                         │
 START → Screenwriter → Showrunner ────────► Director ─────────┘
                          │                    │
-                         │ (no scenes)        │ (escalation)
-                         ▼                    ▼
-                        END              Script Coordinator
-                                                  │
-                              ┌───────────────────┴───────────────────┐
-                              │ (shots remaining)                     │ (no shots)
-                              ▼                                       ▼
-                    Production Designer ────────► Cinematographer ───► Editor
-                                                           │           │
-                                                           ▼           │
-                                              Continuity Supervisor    │
-                                                           │           │
-                              ┌────────────────────────────┴────┐      │
-                              │ (fail)                          │ (pass)
-                              ▼                                 ▼      │
-                    Cinematographer (retry)          Lead Animator    │
-                                                           │           │
-                                                           ▼           │
-                                              Continuity Supervisor    │
-                                                           │           │
-                    ┌───────────────────────────────────────┼───┐      │
-                    │ (fail, retries < 3)                   │   │ (pass)
-                    ▼                                       │   ▼      │
-          Lead Animator (retry)                    Script Coordinator◄──┘
-                    │                                       │
-                    │ (fail, retries >= 3)                  │ (scene done)
-                    ▼                                       ▼
-          Director (escalation)                    Showrunner (next scene)
+                         │ (no scenes)        ▼
+                         ▼              Script Coordinator
+                        END                   │
+                              ┌───────────────┴───────────────┐
+                              │ (shots remaining)             │ (scene done)
+                              ▼                               ▼
+                    Production Designer                    Editor
+                              │                               │
+                              ▼                               │
+                     Cinematographer ◄────────────────────┐   │
+                              │                           │   │
+                              ▼                           │   │
+                  Continuity Supervisor                   │   │
+                              │                           │   │
+                    ┌─────────┴─────────┐                 │   │
+                    │ (fail, retry < 3) │ (pass or 3×)    │   │
+                    ▼                   ▼                  │   │
+              Cinematographer     Lead Animator            │   │
+                (retry)                 │                  │   │
+                                        ▼                  │   │
+                              Continuity Supervisor        │   │
+                                        │                  │   │
+                                        ▼ (shot done)     │   │
+                              Script Coordinator ──────────┘   │
+                                        │ (scene done)         │
+                                        ▼                      │
+                                     Showrunner ◄──────────────┘
 ```
 
-### 6.3 Routing Functions
+### 6.3 Shot Continuation Flow
 
-The graph uses conditional edges for routing:
+When `plan.is_continuation == True`:
 
-```python
-def route_macro_loop(state: AFCState) -> Literal["director", "__end__"]:
-    """Showrunner routes the macro loop."""
-    if state.get("unprocessed_scenes") and not state.get("escalation_required"):
-        return "director"
-    return "__end__"
-
-def route_after_animator_qa(state: AFCState) -> Literal["script_coordinator", "lead_animator", "director"]:
-    """QA evaluates Final Render fidelity."""
-    if state.get("continuity_feedback"):
-        if state.get("render_retry_count", 0) >= 3:
-            return "director"  # Circuit breaker
-        return "lead_animator"  # Retry
-    return "script_coordinator"  # Pass
 ```
+Cinematographer:
+  → Extract last frame from dailies[-1] at 95% duration → keyframe_v1.png
+  → Skip normal keyframe generation
+
+Continuity Supervisor:
+  → Auto-PASS (log "AUTO-PASS (continuation shot)")
+  → No VLM call needed
+
+Lead Animator:
+  → Load previous shot plan
+  → Merge action: prev.ending_composition_description + current.action_description
+  → Extract last frame from previous video
+  → Call generate_video_continuation() with first_frame reference
+```
+
+### 6.4 Keyframe QA & Best-of-N Fallback
+
+1. Cinematographer generates `keyframe_v1.png`
+2. Continuity Supervisor runs VLM check
+3. If FAIL and retries < 3: regenerate with feedback → `keyframe_v2.png`, `keyframe_v3.png`
+4. If all 3 attempts fail: Continuity Supervisor compares all versions via LLM and selects the least severe
+5. Pipeline proceeds with the best candidate
 
 ---
 
 ## 7. Configuration System
 
-### 7.1 Per-Agent Configuration
-
-Each agent has its own configuration section with provider-specific settings:
-
-```yaml
-agents:
-  showrunner:
-    llm: gemini-flash
-  director:
-    llm: gemini-flash
-  production_designer:
-    llm: gemini-flash
-    image: gemini-image
-  cinematographer:
-    llm: gemini-flash
-    image: gemini-image
-  lead_animator:
-    llm: gemini-flash
-    video: minimax-video
-  continuity_supervisor:
-    llm: gemini-pro
-```
-
-### 7.2 Model Definitions
-
-Models are defined in the `models` section and referenced by agents:
+### 7.1 Model Definitions
 
 ```yaml
 models:
   gemini-flash:
     provider: "gemini"
-    model: "gemini-3.1-flash-lite-preview"
+    model: "gemini-3.1-pro-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
 
@@ -312,152 +288,110 @@ models:
 
   gemini-image:
     provider: "gemini"
-    model: "nano-banana-pro-preview"
+    model: "gemini-3.1-flash-image-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
 
-  minimax-video:
-    provider: "minimax"
-    model: "MiniMax-Hailuo-2.3"
-    api_key: "ENV:MINIMAX_VIDEO_API_KEY"
+  kling-video:
+    provider: "kling"
+    model: "kling-v3-omni"
+    api_key: "ENV:KLING_ACCESS_KEY"
+    secret_key: "ENV:KLING_SECRET_KEY"
 ```
 
-### 7.3 Configuration Loading
+### 7.2 Per-Agent Configuration
 
-```python
-from src.config import load_config, ConfigLoader
-
-# Load with hierarchical merging
-config = load_config(project_path="./projects/my_project")
-
-# Get merged agent config
-agent_cfg = ConfigLoader.get_agent_config(config, "director")
+```yaml
+agents:
+  showrunner:
+    llm: gemini-flash
+  screenwriter:
+    llm: gemini-flash
+  production_designer:
+    llm: gemini-flash
+    image: gemini-image
+  director:
+    llm: gemini-flash
+  script_coordinator:
+    llm: gemini-flash
+  cinematographer:
+    llm: gemini-flash
+    image: gemini-image
+  lead_animator:
+    llm: gemini-flash
+    video: kling-video
+  continuity_supervisor:
+    llm: gemini-pro
+  editor:
+    llm: gemini-flash
 ```
 
-### 7.4 Environment Variables
+### 7.3 Style Presets
 
-API keys are specified via environment variables:
+Both presets enforce no-text generation:
 
-```bash
-export GEMINI_FLASH_API_KEY="your_gemini_key"
-export GEMINI_PRO_API_KEY="your_gemini_key"
-export MINIMAX_VIDEO_API_KEY="your_minimax_key"
+```yaml
+style_presets:
+  anime:
+    prompt_prefix: "Studio Ghibli 2D manga style, hand-drawn aesthetic..."
+    prompt_suffix: "...No text, no subtitles, no dialogue bubbles, no captions, no watermarks."
+  cinematic:
+    prompt_prefix: "Cinematic 35mm film style, photorealistic, highly detailed."
+    prompt_suffix: "...No text, no subtitles, no dialogue bubbles, no captions, no watermarks."
 ```
 
 ---
 
-## 8. Technology Stack & Model Selection
+## 8. Technology Stack
 
-| Component | Role | Models | Rationale |
-| :--- | :--- | :--- | :--- |
+| Component | Role | Technology | Rationale |
+|-----------|------|------------|-----------|
 | **Orchestration** | Workflow | **LangGraph** | Cyclic graphs, conditional routing, state management |
-| **Frontend LLM** | Screenwriter, Director, Showrunner | **Gemini 3.1 Flash** | Fast, cost-effective for high-token operations |
-| **Vision QA** | Continuity Supervisor | **Gemini 3.1 Pro** | Top Vision Arena performance for quality checks |
-| **Image API** | Cinematographer | **Gemini Image** | Integrated with LLM for consistent outputs |
-| **Video API** | Lead Animator | **MiniMax Hailuo-2.3** | Cost-effective video generation |
+| **Frontend LLM** | All agents | **Gemini 3.1 Pro** | Fast structured output, vision analysis |
+| **Vision QA** | Continuity Supervisor | **Gemini 3.1 Pro** | Image analysis for keyframe quality |
+| **Image API** | Cinematographer, Production Designer | **Gemini 3.1 Flash Image Preview** | Integrated with LLM for consistent outputs |
+| **Video API** | Lead Animator | **Kling v3-omni** | High-quality video generation with first-frame control |
+| **Compositing** | Editor | **FFmpeg** | Local video assembly with scale/pad normalization |
 
 ---
 
-## 9. Crucial Engineering Caveats & Constraints
+## 9. Engineering Caveats & Constraints
 
-### 9.1 The Circuit Breaker Pattern
+### 9.1 Circuit Breaker
 
-Video APIs are expensive. The LangGraph state strictly enforces the `max_retries_per_shot` counter. If the threshold is reached, the system automatically routes back to the Director to heavily degrade the physical action prompt.
-
-```python
-if state.get("render_retry_count", 0) >= 3:
-    print("🚨 [CIRCUIT BREAKER] Escalate to Director")
-    return "director"
-```
+If keyframe QA fails 3 times, the Continuity Supervisor selects the best-of-N candidate rather than escalating. Video QA is currently auto-passed to save API costs.
 
 ### 9.2 Budget Enforcement
 
-The Showrunner audits costs after each agent invocation:
-
-```python
-def audit_ledger(self, state: AFCState) -> bool:
-    ledger = state.get("ledger")
-    if ledger.accumulated_cost_usd >= ledger.project_budget_usd:
-        return False
-    return True
-```
+The Showrunner audits costs before each scene. Production halts when `accumulated_cost_usd >= project_budget_usd`.
 
 ### 9.3 Cinematic Continuity
 
-The Director maintains continuity through explicit `ending_composition_description` fields that link shots together:
+The Director maintains continuity through:
+- `ending_composition_description`: describes the expected final frame of each shot
+- `is_continuation`: marks shots where the previous shot's motion should seamlessly flow into the current shot
+- Shot N+1's staging references Shot N's ending composition
 
-```json
-{
-  "shot_id": "S1_SHOT_001",
-  "ending_composition_description": "Character A stands at the temple gate, facing camera, right hand raised",
-  "staging_description": "Character A at temple gate, camera at eye level"
-}
-```
+### 9.4 Mirror Reflection Handling
 
-Shot N+1's staging must match Shot N's ending composition.
+The Continuity Supervisor is instructed to not flag laterally inverted details in mirror reflections as inconsistencies, since lateral inversion is physically correct.
 
-### 9.4 Model Version Compatibility
+### 9.5 Character Clothing Consistency
 
-Different providers update models frequently. Pin model versions in production configs to ensure consistent output quality.
-
-### 9.5 Rate Limiting & Cost Management
-
-Implement exponential backoff for API calls. Use separate API keys for different agents to isolate quota limits and track costs per agent.
+Both keyframe and video generation prompts include character appearance descriptions (extracted from lore bible) to maintain clothing and appearance consistency across shots.
 
 ---
 
 ## 10. CLI Interface
 
-### 10.1 Basic Usage
-
 ```bash
 # Create a new project
-python main.py create my_video_project novel.txt --style anime --max-shots 10
+python main.py create my_project novel.txt --style cinematic --max-shots 20
 
 # Run the autonomous pipeline
-python main.py run my_video_project
+python main.py run my_project
 
 # Check status
-python main.py status my_video_project
-```
-
-### 10.2 CLI Arguments
-
-**create**:
-- `name` - Project name
-- `input` - Path to novel text file
-- `--style` - Visual style (anime, cinematic)
-- `--resolution` - Output resolution (1080p, 720p, 360p)
-- `--fps` - Frame rate (default: 24)
-- `--max-shots` - Maximum shots to generate (default: 10)
-- `--chapters` - Comma-separated chapter numbers to process
-
-**run**:
-- `name` - Project name
-- `--stage` - Start from specific stage (not yet implemented)
-- `--shot-index` - Start from specific shot index (not yet implemented)
-
-**status**:
-- `name` - Project name
-
-### 10.3 Agent Files
-
-Each agent is in its own file for modularity:
-
-```
-src/agents/
-├── base.py                    # Base agent classes
-├── showrunner.py              # Workflow orchestration
-├── screenwriter.py            # Novel parsing
-├── director.py                # Shot planning
-├── production_designer.py     # Visual style
-├── cinematographer.py         # Keyframe generation
-├── lead_animator.py           # Video generation
-├── continuity_supervisor.py   # QA
-├── script_coordinator.py      # Shot queue management
-├── editor.py                  # Final assembly
-├── previs_artist.py           # Pre-visualization (legacy)
-├── prompts.py                 # System prompts
-└── utils.py                   # Shared utilities
+python main.py status my_project
 ```
 
 ---
@@ -465,22 +399,32 @@ src/agents/
 ## 11. Key Files
 
 **Configuration:**
-- `config.yaml.template` - Template with defaults
-- `src/config.py` - ConfigLoader implementation
+- `config.yaml.template` — Template with model definitions and agent references
+- `src/config.py` — ConfigLoader with hierarchical config merging
 
 **Providers:**
-- `src/providers/base.py` - Base provider classes
-- `src/providers/gemini.py` - Gemini provider
-- `src/providers/minimax.py` - MiniMax provider
-- `src/providers/openai_compat.py` - OpenAI-compatible provider
-- `src/providers/factory.py` - ProviderFactory
+- `src/providers/base.py` — Base provider interfaces
+- `src/providers/gemini.py` — Gemini LLM + Image provider
+- `src/providers/kling.py` — Kling Video provider (JWT auth, task polling)
+- `src/providers/minimax.py` — MiniMax Video provider
+- `src/providers/factory.py` — ProviderFactory
 
 **Pipeline:**
-- `src/pipeline/project.py` - Project management
-- `src/pipeline/graph.py` - LangGraph workflow
-- `src/pipeline/state.py` - AFCState definitions
-- `src/pipeline/workspace.py` - AgenticWorkspace for file I/O
-- `src/pipeline/chapters.py` - Chapter database
+- `src/pipeline/graph.py` — LangGraph workflow with routing functions
+- `src/pipeline/state.py` — AFCState and ShotExecutionPlan definitions
+- `src/pipeline/workspace.py` — AgenticWorkspace for file I/O
+- `src/pipeline/project.py` — Project management
+
+**Agents:**
+- `src/agents/base.py` — BaseCreative, BaseOrchestrator, BaseQA, BaseExecutor
+- `src/agents/screenwriter.py` — Novel → scene parsing with scene_id normalization
+- `src/agents/director.py` — Scene → shot planning with is_continuation marking
+- `src/agents/production_designer.py` — Master style, character designs, location designs
+- `src/agents/cinematographer.py` — Keyframe generation with continuation frame extraction
+- `src/agents/continuity_supervisor.py` — VLM QA with auto-pass for continuation shots
+- `src/agents/lead_animator.py` — Video generation with continuation mode
+- `src/agents/editor.py` — Per-scene video assembly
+- `src/agents/prompts.py` — System prompts for agents
 
 **Entry Point:**
-- `main.py` - CLI and pipeline runner
+- `main.py` — CLI (create, run, status)

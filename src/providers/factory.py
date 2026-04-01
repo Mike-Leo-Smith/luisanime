@@ -4,6 +4,7 @@ from .base import BaseLLMProvider, BaseImageProvider, BaseVideoProvider
 from .gemini import GeminiProvider
 from .minimax import MiniMaxProvider
 from .openai_compat import OpenAICompatibleProvider
+from .kling import KlingProvider
 
 
 class ProviderFactory:
@@ -74,6 +75,15 @@ class ProviderFactory:
                 base_url=config.get("base_url", "https://api.minimaxi.com/v1"),
                 video_model=config.get("model", "MiniMax-Hailuo-02"),
             )
+        elif provider_type == "kling":
+            secret_key = cls._resolve_api_key(config.get("secret_key", ""))
+            return KlingProvider(
+                access_key=api_key,
+                secret_key=secret_key,
+                base_url=config.get("base_url", "https://api-beijing.klingai.com"),
+                model=config.get("model", "kling-v3-omni"),
+                mode=config.get("mode", "pro"),
+            )
         else:
             raise ValueError(f"Unknown video provider: {provider_type}")
 
@@ -93,3 +103,4 @@ ProviderFactory.register_llm("openai", OpenAICompatibleProvider)
 ProviderFactory.register_image("gemini", GeminiProvider)
 ProviderFactory.register_image("minimax", MiniMaxProvider)
 ProviderFactory.register_video("minimax", MiniMaxProvider)
+ProviderFactory.register_video("kling", KlingProvider)
