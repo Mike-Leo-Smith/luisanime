@@ -127,7 +127,7 @@ class DirectorAgent(BaseCreative):
         Dialogue timing should match the shot's action — a character speaking should be visible and their expression should match the emotion.
         
         CINEMATIC FLUIDITY RULES:
-        1. COMPLETE COVERAGE: Every story beat in the scene MUST have a corresponding shot. Do NOT skip any action, dialogue exchange, or emotional shift. If the scene has 5 distinct events, you need at minimum 5 shots.
+        1. EFFICIENT NARRATIVE COVERAGE: Cover all KEY story beats and emotional turning points, but do NOT mechanically create one shot per action. Multiple small actions can be combined into a single shot with camera movement or staging changes. Use cinematographic techniques (establishing shots, push-ins, pans, background/foreground layering) to convey information efficiently. Prioritize FLOW and RHYTHM over exhaustive coverage. A scene with 6 tight, well-paced shots is better than 12 redundant ones.
         2. SMOOTH TRANSITIONS: Plan how each shot visually connects to the next. Use match cuts, continuous pans, or cut-on-action — avoid static-to-static jumps.
         3. PACING: Dialogue-heavy or complex-action shots should use target_duration_ms=10000. Simple establishing or transition shots use target_duration_ms=5000. Never pack more than 2 distinct movements into one shot.
         4. SHOT VARIETY: Alternate between wide, medium, and close-up shots. Do not use the same scale for 3+ consecutive shots.

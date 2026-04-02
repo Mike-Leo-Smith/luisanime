@@ -54,7 +54,8 @@ def route_after_continuity_supervisor(
     feedback = state.get("continuity_feedback")
     current_keyframe = state.get("current_keyframe_path")
     is_render_phase = current_render is not None
-    retry_count = state.get("render_retry_count", 0)
+    render_retries = state.get("render_retry_count", 0)
+    keyframe_retries = state.get("keyframe_retry_count", 0)
 
     print(f"\n{'=' * 60}")
     print(f"🔀 [ROUTER] route_after_continuity_supervisor")
@@ -62,7 +63,8 @@ def route_after_continuity_supervisor(
     print(f"   current_keyframe_path: {current_keyframe}")
     print(f"   continuity_feedback: {feedback[:100] if feedback else None}")
     print(f"   is_render_phase: {is_render_phase}")
-    print(f"   render_retry_count: {retry_count}")
+    print(f"   render_retry_count: {render_retries}")
+    print(f"   keyframe_retry_count: {keyframe_retries}")
 
     if is_render_phase:
         if not feedback:
@@ -72,15 +74,17 @@ def route_after_continuity_supervisor(
             print(f"{'=' * 60}\n")
             return "script_coordinator"
         else:
-            if retry_count >= 3:
-                print(f"   🚨 [CIRCUIT BREAKER] retry_count={retry_count} >= 3")
+            if render_retries >= 3:
+                print(
+                    f"   🚨 [CIRCUIT BREAKER] render_retry_count={render_retries} >= 3"
+                )
                 print(
                     f"   ➡️  DECISION: Route to 'director' (escalate for simplification)"
                 )
                 print(f"{'=' * 60}\n")
                 return "director"
             print(
-                f"   ➡️  DECISION: Route to 'lead_animator' (re-render, retry #{retry_count + 1})"
+                f"   ➡️  DECISION: Route to 'lead_animator' (re-render, retry #{render_retries + 1})"
             )
             print(f"{'=' * 60}\n")
             return "lead_animator"
@@ -92,9 +96,9 @@ def route_after_continuity_supervisor(
             print(f"{'=' * 60}\n")
             return "lead_animator"
         else:
-            if retry_count >= 3:
+            if keyframe_retries >= 3:
                 print(
-                    f"   🚨 [CIRCUIT BREAKER] Keyframe retry_count={retry_count} >= 3"
+                    f"   🚨 [CIRCUIT BREAKER] keyframe_retry_count={keyframe_retries} >= 3"
                 )
                 print(
                     f"   ➡️  DECISION: Route to 'director' (escalate for simplification)"

@@ -77,7 +77,7 @@ def _get_initial_state(args, pm) -> AFCState:
         current_render_path=None,
         scene_dailies_paths=[],
         completed_scenes_paths=[],
-        previs_retry_count=0,
+        keyframe_retry_count=0,
         render_retry_count=0,
         continuity_feedback=None,
         escalation_required=False,

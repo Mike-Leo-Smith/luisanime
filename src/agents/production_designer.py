@@ -130,7 +130,7 @@ Novel Excerpt:
         if reference_paths:
             ref_instruction = " IMPORTANT: Match the location's architectural style, color palette, and atmosphere shown in the reference panorama. Adapt lighting and weather to this scene's specific moment while maintaining the same place's identity."
 
-        prompt = f"{prefix} A high-quality cinematic concept art of a location/environment. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} Wide establishing shot, detailed architecture and atmosphere, no characters."
+        prompt = f"{prefix} A high-quality cinematic 21:9 PANORAMA concept art of a location/environment. This is a wide panoramic view for spatial reference. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} Ultra-wide panoramic establishing shot, detailed architecture and atmosphere, no characters."
 
         if len(prompt) > 1400:
             prompt = prompt[:1400]
@@ -140,6 +140,8 @@ Novel Excerpt:
             config.reference_media = [
                 self.workspace.get_physical_path(p) for p in reference_paths
             ]
+        config.width = 2016
+        config.height = 960
 
         safe_name = location_name.replace("/", "_").replace("\\", "_")
         if scene_id:

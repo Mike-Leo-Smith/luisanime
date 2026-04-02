@@ -237,7 +237,7 @@ Respond in JSON:
         img_idx = 1
         for d in designs:
             if "/locations/" in d:
-                label = f"Image {img_idx}: LOCATION/ENVIRONMENT DESIGN — reference for the setting's architecture, layout, and atmosphere."
+                label = f"Image {img_idx}: LOCATION/ENVIRONMENT PANORAMA (21:9 wide) — reference for the setting's architecture, layout, and spatial arrangement. Use this panorama to understand the full environment context."
             else:
                 entity_name = d.rsplit("/", 1)[-1].replace(".png", "")
                 label = f"Image {img_idx}: CHARACTER DESIGN for '{entity_name}' — reference for this character's appearance, clothing, and body type."
@@ -345,27 +345,48 @@ LORE CONTEXT: {lore_context}
 VISUAL STYLE REFERENCE:
 {master_style}
 
-TECHNICAL: 8k resolution, photorealistic, masterpiece. {suffix}"""
+TECHNICAL: Generate a 21:9 ultra-wide panoramic keyframe. This wide aspect ratio helps the AI video model understand the full spatial context of the scene. Photorealistic, masterpiece quality. {suffix}"""
 
-        if feedback:
-            full_prompt += f"\nREVISION FEEDBACK (FIX THESE): {feedback}"
+        failed_keyframe_ref = []
+        if feedback and retry_count > 0:
+            failed_version_path = f"05_dailies/{shot_id}/keyframe_v{retry_count}.png"
+            if self.workspace.exists(failed_version_path):
+                failed_keyframe_ref = [failed_version_path]
+                ref_manifest_lines.append(
+                    f"Image {img_idx}: FAILED KEYFRAME (v{retry_count}) — this is the PREVIOUS ATTEMPT that was REJECTED by QA. See the revision feedback below for what went wrong. You MUST fix these issues in your new generation."
+                )
+                img_idx += 1
+
+            full_prompt += f"""
+
+REVISION FEEDBACK (CRITICAL — you MUST fix these issues):
+The previous keyframe attempt (v{retry_count}) was REJECTED. {"The rejected image is attached as the LAST reference image." if failed_keyframe_ref else ""}
+QA REJECTION REASON: {feedback}
+
+You MUST:
+1. Carefully study the rejection reason above.
+2. {"Examine the attached failed keyframe to understand exactly what went wrong visually." if failed_keyframe_ref else ""}
+3. Generate a NEW keyframe that fixes ALL listed issues while maintaining everything else correct.
+4. Do NOT introduce new problems while fixing the old ones."""
 
         print(
             f"📸 [Cinematographer] Final Prompt for {shot_id} v{version} ({len(full_prompt)} chars):\n{full_prompt[:500]}..."
         )
 
-        all_refs = designs + continuity_refs
+        all_refs = designs + continuity_refs + failed_keyframe_ref
         physical_refs = [self.workspace.get_physical_path(p) for p in all_refs]
         print(f"📸 [Cinematographer] Reference images: {len(physical_refs)} files")
 
         video_cfg = self.project_config.get("video", {})
         res_str = video_cfg.get("resolution", "1080p")
-        width, height = 1920, 1080
+        width, height = 2016, 960
         if res_str == "720p":
-            width, height = 1280, 720
+            width, height = 1344, 640
         elif res_str == "4k":
-            width, height = 3840, 2160
-        print(f"📸 [Cinematographer] Resolution: {width}x{height} ({res_str})")
+            width, height = 4032, 1920
+        print(
+            f"📸 [Cinematographer] Resolution: {width}x{height} (21:9 panorama, {res_str})"
+        )
 
         image_path = f"05_dailies/{shot_id}/keyframe_v{version}.png"
         self.log_prompt(
@@ -379,7 +400,15 @@ TECHNICAL: 8k resolution, photorealistic, masterpiece. {suffix}"""
             width=width, height=height, reference_media=physical_refs
         )
         t0 = time.time()
-        response = self.image_gen.generate_image(prompt=full_prompt, config=config)
+        try:
+            response = self.image_gen.generate_image(prompt=full_prompt, config=config)
+        except Exception as e:
+            print(
+                f"📸 [Cinematographer] ⚠️  Image generation failed for {shot_id} v{version}: {e}"
+            )
+            raise RuntimeError(
+                f"Keyframe generation failed for {shot_id} v{version}: {e}"
+            ) from e
         elapsed = time.time() - t0
 
         self.workspace.save_media(image_path, response.image_bytes)
@@ -448,7 +477,7 @@ def cinematographer_node(state: AFCState) -> Dict:
                 f"📸 [Cinematographer] Last frame extraction failed ({e}), falling back to standard generation"
             )
 
-    retry_count = state.get("render_retry_count", 0)
+    retry_count = state.get("keyframe_retry_count", 0)
     reconciled = False
     if not plan.is_continuation and dailies and retry_count == 0:
         prev_video = dailies[-1]

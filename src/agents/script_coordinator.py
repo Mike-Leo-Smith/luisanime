@@ -49,13 +49,25 @@ class ScriptCoordinatorAgent(BaseState):
         return muts
 
     def update_lore_bible(self, entity_id: str, new_state: str) -> bool:
-        """Overwrites the markdown profile of an entity in the workspace."""
         path = f"03_lore_bible/{entity_id}.md"
         print(
             f"📖 [Script Coordinator] Updating Lore Bible: {entity_id} -> {new_state}"
         )
-        content = f"# {entity_id}\n\nLatest State: {new_state}"
-        self.workspace.write_file(path, content)
+        try:
+            existing = self.workspace.read_file(path)
+        except (FileNotFoundError, Exception):
+            existing = ""
+
+        state_section_header = "\n\n## Narrative State Updates\n"
+        if "## Narrative State Updates" not in existing:
+            existing += state_section_header
+
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        existing += f"\n- [{timestamp}] {new_state}"
+
+        self.workspace.write_file(path, existing)
         return True
 
 
@@ -83,6 +95,7 @@ def script_coordinator_node(state: AFCState) -> Dict:
             "current_proxy_path": None,
             "continuity_feedback": None,
             "render_retry_count": 0,
+            "keyframe_retry_count": 0,
             "keyframe_is_reused_frame": False,
         }
 
@@ -109,5 +122,6 @@ def script_coordinator_node(state: AFCState) -> Dict:
         "current_proxy_path": None,
         "continuity_feedback": None,
         "render_retry_count": 0,
+        "keyframe_retry_count": 0,
         "keyframe_is_reused_frame": False,
     }

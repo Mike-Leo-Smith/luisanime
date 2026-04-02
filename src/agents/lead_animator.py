@@ -87,11 +87,11 @@ class LeadAnimatorAgent(BaseExecutor):
         transition_block = ""
         if transition_mode:
             transition_block = """
-        SHOT TRANSITION MODE (CRITICAL):
-        <<<image_1>>> is the LAST FRAME of the PREVIOUS shot (this is the video's starting point).
-        <<<image_2>>> is the TARGET KEYFRAME for the CURRENT shot (this is what the composition should transition toward).
-        The video MUST begin from the state shown in <<<image_1>>> and transition AS QUICKLY AND SMOOTHLY AS POSSIBLE toward the composition, camera angle, and framing shown in <<<image_2>>>. Within the first 1-2 seconds, the camera should reframe/cut/pan to match <<<image_2>>>, then continue with the planned action from there.
-        When writing the prompt, start with "Starting from <<<image_1>>>, " and explicitly describe the camera transition toward <<<image_2>>> before describing the main action."""
+        SHOT TRANSITION MODE:
+        <<<image_1>>> is the LAST FRAME of the PREVIOUS shot — this is the video's starting point.
+        <<<image_2>>> is the TARGET KEYFRAME for the CURRENT shot — use it as visual reference for the intended composition and framing.
+        The video begins from the state shown in <<<image_1>>>. Transition naturally toward the target composition — the video model will decide the best cinematic transition (cut, pan, dissolve, etc.).
+        When writing the prompt, start with "Starting from <<<image_1>>>, " and describe the scene evolution toward the target composition."""
 
         starting_instruction = "Starting from <<<image_1>>>, ..."
         image_1_desc = "the starting keyframe image"
@@ -120,6 +120,7 @@ class LeadAnimatorAgent(BaseExecutor):
             - STRICTLY FORBIDDEN: Background music, musical score, soundtrack, mood music, incidental music, sound effects that don't originate from visible objects in the scene (e.g., no "whoosh" transitions, no cinematic booms, no dramatic stingers).
             - Describe the ambient soundscape briefly: e.g., "The quiet hum of fluorescent lights and distant traffic outside the window." This helps the model generate appropriate environmental audio without adding music.
         11. CHARACTER COUNT (CRITICAL): This shot contains EXACTLY {entity_count} character(s). Do NOT introduce extra people, bystanders, or background figures. If the starting keyframe shows exactly {entity_count} figure(s), the video must maintain that exact count throughout — no one appears or vanishes unless the action explicitly describes an entrance or exit.
+        12. DIALOGUE TIMING (CRITICAL): Do NOT place any character dialogue or speech at the very BEGINNING (first 0.5 seconds) or very END (last 0.5 seconds) of the video clip. Dialogue at clip boundaries will be cut off when clips are concatenated. Place all dialogue in the middle portion of the clip.
         {transition_block}
         SPATIAL CONSISTENCY:
         - Maintain the spatial layout visible in <<<image_1>>>. Object positions, furniture, and architectural features must not shift during the video.
@@ -221,7 +222,7 @@ class LeadAnimatorAgent(BaseExecutor):
                 labels.append(
                     (
                         f"<<<image_{idx}>>>",
-                        f"Environment/location reference: {basename}",
+                        f"Environment/location PANORAMA (21:9 wide): {basename} — use for spatial context",
                     )
                 )
             else:
@@ -279,7 +280,7 @@ class LeadAnimatorAgent(BaseExecutor):
                     ref_labels.append(
                         (
                             f"<<<image_{idx}>>>",
-                            f"Environment/location reference: {basename}",
+                            f"Environment/location PANORAMA (21:9 wide): {basename} — use for spatial context",
                         )
                     )
                 else:

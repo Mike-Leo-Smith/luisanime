@@ -180,6 +180,7 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
     print(f"   current_keyframe_path: {state.get('current_keyframe_path')}")
     print(f"   current_render_path: {state.get('current_render_path')}")
     print(f"   render_retry_count: {state.get('render_retry_count', 0)}")
+    print(f"   keyframe_retry_count: {state.get('keyframe_retry_count', 0)}")
     print(
         f"   continuity_feedback: {str(state.get('continuity_feedback'))[:100] if state.get('continuity_feedback') else None}"
     )
@@ -225,7 +226,7 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
             )
             return {"continuity_feedback": None}
         else:
-            retry = state.get("render_retry_count", 0) + 1
+            retry = state.get("keyframe_retry_count", 0) + 1
 
             if retry >= 3:
                 print(
@@ -279,7 +280,7 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
                 return {
                     "continuity_feedback": None,
                     "current_keyframe_path": best_path,
-                    "render_retry_count": 0,
+                    "keyframe_retry_count": 0,
                 }
 
             print(
@@ -287,7 +288,7 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
             )
             return {
                 "continuity_feedback": res["feedback"],
-                "render_retry_count": retry,
+                "keyframe_retry_count": retry,
             }
 
     # 2. Video Validation — auto-pass to save API costs
@@ -308,6 +309,7 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
             "continuity_feedback": None,
             "current_keyframe_path": None,
             "render_retry_count": 0,
+            "keyframe_retry_count": 0,
         }
 
     print(f"🧐 [Continuity Supervisor] === NODE EXIT === Nothing to validate (no-op)")
