@@ -81,6 +81,7 @@ def _get_initial_state(args, pm) -> AFCState:
         render_retry_count=0,
         continuity_feedback=None,
         escalation_required=False,
+        keyframe_is_reused_frame=False,
     )
 
 

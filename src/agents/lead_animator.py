@@ -60,6 +60,7 @@ class LeadAnimatorAgent(BaseExecutor):
         action_text: str,
         master_style: str,
         ref_labels: Optional[List[tuple]] = None,
+        transition_mode: bool = False,
     ) -> str:
         appearance_block = build_appearance_block(self.workspace, plan.character_poses)
         dialogue_block = build_dialogue_block_video(plan.dialogue or [])
@@ -81,6 +82,22 @@ class LeadAnimatorAgent(BaseExecutor):
             for_video=True,
         )
 
+        entity_count = len(plan.active_entities)
+
+        transition_block = ""
+        if transition_mode:
+            transition_block = """
+        SHOT TRANSITION MODE (CRITICAL):
+        <<<image_1>>> is the LAST FRAME of the PREVIOUS shot (this is the video's starting point).
+        <<<image_2>>> is the TARGET KEYFRAME for the CURRENT shot (this is what the composition should transition toward).
+        The video MUST begin from the state shown in <<<image_1>>> and transition AS QUICKLY AND SMOOTHLY AS POSSIBLE toward the composition, camera angle, and framing shown in <<<image_2>>>. Within the first 1-2 seconds, the camera should reframe/cut/pan to match <<<image_2>>>, then continue with the planned action from there.
+        When writing the prompt, start with "Starting from <<<image_1>>>, " and explicitly describe the camera transition toward <<<image_2>>> before describing the main action."""
+
+        starting_instruction = "Starting from <<<image_1>>>, ..."
+        image_1_desc = "the starting keyframe image"
+        if transition_mode:
+            image_1_desc = "the LAST FRAME of the previous shot (starting point)"
+
         return f"""Combine the following cinematic instructions into a single PURELY PHYSICAL motion description in English for a video generation model.
         
         STRICT RULES:
@@ -91,22 +108,23 @@ class LeadAnimatorAgent(BaseExecutor):
            b) Body position and staging (where they stand/sit relative to the environment and other characters, facing direction)
            c) Specific physical action and gesture (what their hands, arms, head, torso are doing moment by moment)
            d) Facial expression and gaze direction
-        4. Start the description by referencing the starting keyframe image. Use the exact token <<<image_1>>> to refer to it.
+        4. Start the description by referencing {image_1_desc}. Use the exact token <<<image_1>>> to refer to it.
            Example: "Starting from <<<image_1>>>, the camera slowly dollies forward as the figure raises their hand..."
         5. The description should be DETAILED but CONCISE (250-350 words). Do NOT over-compress or omit character details, but avoid redundant adjectives and filler. Every character's clothing, position, and action must be explicitly described — the video model cannot infer what it is not told. The TOTAL prompt (including style prefix/suffix added later) must stay under 2500 characters.
         6. Include light quality, camera movement, and environmental atmosphere, but character appearance and action details take PRIORITY — never sacrifice character description for brevity.
         7. NEVER include any on-screen text, subtitles, captions, dialogue bubbles, narration overlays, or watermarks in the description. The output is a PURE VISUAL motion sequence with zero text elements.
         8. If characters are speaking, you MUST include their dialogue in your output. Write it as: the character says "exact spoken line here" (in the original language). The video model generates audio from your text, so spoken lines in quotation marks are essential for correct speech synthesis. Also describe lip movement, facial expressions, and body gestures matching the emotion of the dialogue.
-        9. Include the reference image tokens (<<<image_2>>>, <<<image_3>>>, etc.) when first describing each character or the environment, so the video model can match their visual appearance and the spatial layout.
+        9. Include the reference image tokens when first describing each character or the environment, so the video model can match their visual appearance and the spatial layout.
         10. AUDIO DIRECTION (CRITICAL): The video model generates audio. You MUST specify the sound design:
             - ALLOWED sounds: Scene ambient noise (room tone, wind, rain, traffic, birds), object interaction sounds (footsteps, door creaking, cup clinking, typing, tools operating), character dialogue (spoken lines in quotation marks), narration voiceover (if applicable).
             - STRICTLY FORBIDDEN: Background music, musical score, soundtrack, mood music, incidental music, sound effects that don't originate from visible objects in the scene (e.g., no "whoosh" transitions, no cinematic booms, no dramatic stingers).
             - Describe the ambient soundscape briefly: e.g., "The quiet hum of fluorescent lights and distant traffic outside the window." This helps the model generate appropriate environmental audio without adding music.
-        
+        11. CHARACTER COUNT (CRITICAL): This shot contains EXACTLY {entity_count} character(s). Do NOT introduce extra people, bystanders, or background figures. If the starting keyframe shows exactly {entity_count} figure(s), the video must maintain that exact count throughout — no one appears or vanishes unless the action explicitly describes an entrance or exit.
+        {transition_block}
         SPATIAL CONSISTENCY:
-        - Maintain the spatial layout visible in the starting keyframe <<<image_1>>>. Object positions, furniture, and architectural features must not shift during the video.
+        - Maintain the spatial layout visible in <<<image_1>>>. Object positions, furniture, and architectural features must not shift during the video.
         - Character scale and body proportions must stay physically realistic relative to the environment throughout the motion.
-        - Spatial relationships between characters (distance, facing direction, relative height) must evolve naturally from the starting keyframe — no teleporting or sudden repositioning.
+        - Spatial relationships between characters (distance, facing direction, relative height) must evolve naturally from the starting frame — no teleporting or sudden repositioning.
         - If a character interacts with an object or another character, the contact point must be anatomically plausible and spatially consistent with the established layout.
         - Gaze direction and body orientation must match who/what the character is addressing at each moment.
         {ref_block}
@@ -118,7 +136,7 @@ class LeadAnimatorAgent(BaseExecutor):
         Action: {action_text}
         Camera Plan: {plan.detailed_camera_plan}
         
-        Output ONLY the distilled English description beginning with "Starting from <<<image_1>>>, ..."."""
+        Output ONLY the distilled English description beginning with "{starting_instruction}"."""
 
     def _apply_style_and_generate(
         self,
@@ -218,11 +236,16 @@ class LeadAnimatorAgent(BaseExecutor):
         proxy: Optional[str],
         prompt: str,
         scene_path: Optional[str] = None,
+        prev_last_frame: Optional[str] = None,
     ) -> str:
         shot_id = plan.shot_id
+        transition_mode = prev_last_frame is not None
         print(f"🎨 [Lead Animator] Executing render for {shot_id}")
         print(f"   Keyframe: {keyframe}")
         print(f"   Proxy: {proxy}")
+        print(f"   Transition mode: {transition_mode}")
+        if transition_mode:
+            print(f"   Prev last frame (first_frame): {prev_last_frame}")
         print(f"   Action prompt: {prompt[:200]}...")
 
         master_style = load_master_style(self.workspace)
@@ -235,10 +258,45 @@ class LeadAnimatorAgent(BaseExecutor):
             log_prefix="🎨 [Lead Animator]",
             return_physical=True,
         )
-        ref_labels = self._build_ref_labels(plan, ref_paths)
+
+        if transition_mode:
+            keyframe_physical = self.workspace.get_physical_path(keyframe)
+            all_ref_paths = [keyframe_physical] + ref_paths
+            ref_labels = [
+                (
+                    "<<<image_2>>>",
+                    "TARGET KEYFRAME for this shot — transition toward this composition",
+                )
+            ]
+            idx = 3
+            for ref_path in ref_paths:
+                basename = os.path.basename(ref_path).replace(".png", "")
+                if basename in plan.active_entities:
+                    ref_labels.append(
+                        (f"<<<image_{idx}>>>", f"Character reference for {basename}")
+                    )
+                elif "locations" in ref_path or "location" in ref_path.lower():
+                    ref_labels.append(
+                        (
+                            f"<<<image_{idx}>>>",
+                            f"Environment/location reference: {basename}",
+                        )
+                    )
+                else:
+                    ref_labels.append(
+                        (f"<<<image_{idx}>>>", f"Visual reference: {basename}")
+                    )
+                idx += 1
+        else:
+            all_ref_paths = ref_paths
+            ref_labels = self._build_ref_labels(plan, ref_paths)
 
         distillation_prompt = self._build_distillation_prompt(
-            plan, prompt, master_style, ref_labels=ref_labels if ref_labels else None
+            plan,
+            prompt,
+            master_style,
+            ref_labels=ref_labels if ref_labels else None,
+            transition_mode=transition_mode,
         )
 
         print(f"🎨 [Lead Animator] Distilling motion prompt...")
@@ -252,9 +310,17 @@ class LeadAnimatorAgent(BaseExecutor):
             f"🎨 [Lead Animator] Distilled prompt ({elapsed:.1f}s): {safe_prompt[:300]}"
         )
 
-        keyframe_physical = self.workspace.get_physical_path(keyframe)
+        if transition_mode:
+            first_frame_physical = self.workspace.get_physical_path(prev_last_frame)
+        else:
+            first_frame_physical = self.workspace.get_physical_path(keyframe)
+
         return self._apply_style_and_generate(
-            plan, safe_prompt, keyframe_physical, proxy, reference_images=ref_paths
+            plan,
+            safe_prompt,
+            first_frame_physical,
+            proxy,
+            reference_images=all_ref_paths,
         )
 
     def generate_video_continuation(
@@ -385,12 +451,30 @@ def lead_animator_node(state: AFCState) -> Dict:
     else:
         print(f"🎨 [Lead Animator] Standard generation mode")
 
+    prev_last_frame_path: Optional[str] = None
+    keyframe_is_reused = state.get("keyframe_is_reused_frame", False)
+    if dailies and not keyframe_is_reused and not plan.is_continuation:
+        prev_video = dailies[-1]
+        prev_last_frame_path_phys = agent._extract_last_frame(
+            prev_video, ws.get_physical_path(f"05_dailies/{plan.shot_id}")
+        )
+        if prev_last_frame_path_phys:
+            prev_last_frame_path = f"05_dailies/{plan.shot_id}/last_frame.png"
+            print(
+                f"🎨 [Lead Animator] TRANSITION MODE — prev last frame as first_frame, keyframe as reference target"
+            )
+        else:
+            print(
+                f"🎨 [Lead Animator] Could not extract prev last frame, using keyframe as first_frame"
+            )
+
     render_path = agent.generate_video_v2v(
         plan,
         state["current_keyframe_path"],
         state.get("current_proxy_path"),
         plan.action_description,
         scene_path=scene_path,
+        prev_last_frame=prev_last_frame_path,
     )
 
     print(f"🎨 [Lead Animator] === NODE EXIT === render={render_path}")

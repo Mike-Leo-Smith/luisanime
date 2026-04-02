@@ -68,6 +68,13 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         print(f"🧐 [Continuity Supervisor] Keyframe check for {image_path}")
         print(f"   Shot: {plan.shot_id} | Action: {plan.action_description[:150]}...")
 
+        entity_list = (
+            ", ".join(plan.active_entities)
+            if plan.active_entities
+            else "none specified"
+        )
+        entity_count = len(plan.active_entities)
+
         prompt = f"""Analyze this generated keyframe for a film adaptation.
         
         STRICT REQUIREMENT: This MUST be the absolute FIRST FRAME (Frame 0) of the following shot.
@@ -75,6 +82,7 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         SHOT ACTION START: {plan.action_description}
         INITIAL STAGING: {plan.staging_description}
         INITIAL POSES: {json.dumps(plan.character_poses, ensure_ascii=False)}
+        ACTIVE ENTITIES (GROUND TRUTH): [{entity_list}] — EXACTLY {entity_count} character(s) should appear.
         
         Original Novel Context: {novel_context}
         
@@ -83,7 +91,7 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         2. NOVEL CONFORMANCE: Does the image reflect characters and mood from the novel?
         3. AIGC ARTIFACTS: Check for mutated hands, floating limbs, distorted faces.
         4. SPATIAL CONSISTENCY: If reference frames from previous shots are available, verify that the room layout, furniture positions, door orientations, window locations, prop placements, and lighting direction remain consistent across angles. Flag any contradictions in the physical environment.
-        5. DUPLICATE / EXTRA ENTITIES (STRICT): Count the number of distinct people and prominent objects in the image. Compare against the shot plan's active_entities list and staging description. If there are MORE people than specified (e.g., 3 figures when only 2 characters are listed), or if a character appears duplicated (same person visible twice), or if there are conspicuous extra objects not described in the scene (e.g., an extra chair, a phantom limb, a floating item), this is a HARD FAIL. Duplicate or phantom entities are a critical AIGC hallucination artifact.
+        5. DUPLICATE / EXTRA ENTITIES (STRICT — MUST CHECK): First, count every distinct human figure visible in the image. The EXPECTED count is EXACTLY {entity_count} ({entity_list}). If you count MORE figures than {entity_count}, this is an automatic HARD FAIL — even if the extra figure is blurry, partially occluded, in the background, or appears to be a reflection (unless a mirror is explicitly part of the staging). Also check: if the SAME character appears to be rendered twice in different positions, or if a phantom/ghost figure is visible that does not correspond to any listed entity, this is a HARD FAIL. Duplicate, phantom, or extra characters are critical AIGC hallucination artifacts that MUST be caught.
         6. CHARACTER STATE CONTINUITY (STRICT — if previous shot reference frames are available): Check that each character's posture and action state is logically consistent with the PREVIOUS SHOT END FRAME. If a character was standing at the end of the previous shot, they must NOT be sitting or lying down in this frame (unless the shot plan explicitly describes them sitting down). If a character was holding an object, they should still have it. State regression (e.g., standing→sitting, holding→empty hands) without a described transition is a HARD FAIL.
         
         IMPORTANT TOLERANCE RULES:

@@ -70,3 +70,4 @@ class AFCState(TypedDict):
     render_retry_count: Annotated[int, _replace]
     continuity_feedback: Annotated[Optional[str], _replace]
     escalation_required: Annotated[bool, _replace]
+    keyframe_is_reused_frame: Annotated[bool, _replace]

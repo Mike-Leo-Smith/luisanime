@@ -286,10 +286,16 @@ You MUST NOT directly copy or reproduce the composition, camera angle, or framin
             for_video=False,
         )
 
+        entity_count = len(plan.active_entities)
+        entity_list = (
+            ", ".join(plan.active_entities) if plan.active_entities else "none"
+        )
+
         full_prompt = f"""{prefix} 
 STRICT RULE: This image MUST be the absolute STARTING FRAME (First Frame) of the shot.
 STRICT RULE: Generate ONE single focused cinematic shot. NO multi-panels, NO montages.
 STRICT RULE: Do NOT render any on-screen text, subtitles, captions, dialogue bubbles, manga speech balloons, narration text, watermarks, or any form of written words in the image. The output must be a PURE VISUAL frame with zero text elements.
+STRICT RULE: This shot contains EXACTLY {entity_count} character(s): [{entity_list}]. Do NOT add any extra people, bystanders, crowd members, or background figures unless explicitly listed. Rendering more than {entity_count} human figure(s) is a critical error.
 
 {ref_manifest}
 
@@ -433,7 +439,10 @@ def cinematographer_node(state: AFCState) -> Dict:
             print(
                 f"📸 [Cinematographer] === NODE EXIT === keyframe={keyframe_path} (continuation)"
             )
-            return {"current_keyframe_path": keyframe_path}
+            return {
+                "current_keyframe_path": keyframe_path,
+                "keyframe_is_reused_frame": True,
+            }
         except Exception as e:
             print(
                 f"📸 [Cinematographer] Last frame extraction failed ({e}), falling back to standard generation"
@@ -478,6 +487,7 @@ def cinematographer_node(state: AFCState) -> Dict:
                 return {
                     "current_keyframe_path": keyframe_path,
                     "active_shot_plan": plan,
+                    "keyframe_is_reused_frame": True,
                 }
             else:
                 print(
@@ -511,7 +521,10 @@ def cinematographer_node(state: AFCState) -> Dict:
     )
 
     print(f"📸 [Cinematographer] === NODE EXIT === keyframe={keyframe_path}")
-    result: Dict[str, Any] = {"current_keyframe_path": keyframe_path}
+    result: Dict[str, Any] = {
+        "current_keyframe_path": keyframe_path,
+        "keyframe_is_reused_frame": False,
+    }
     if reconciled:
         result["active_shot_plan"] = plan
     return result
