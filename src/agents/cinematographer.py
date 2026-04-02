@@ -19,6 +19,44 @@ from src.agents.shared import (
 
 import ffmpeg
 import os
+import shutil
+
+
+RECONCILIATION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "reuse_last_frame": {
+            "type": "BOOLEAN",
+        },
+        "reasoning": {
+            "type": "STRING",
+        },
+        "updated_action_description": {
+            "type": "STRING",
+        },
+        "updated_staging_description": {
+            "type": "STRING",
+        },
+        "updated_character_poses": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "entity_id": {"type": "STRING"},
+                    "pose": {"type": "STRING"},
+                },
+                "required": ["entity_id", "pose"],
+            },
+        },
+    },
+    "required": [
+        "reuse_last_frame",
+        "reasoning",
+        "updated_action_description",
+        "updated_staging_description",
+        "updated_character_poses",
+    ],
+}
 
 
 class CinematographerAgent(BaseExecutor):
@@ -53,6 +91,126 @@ class CinematographerAgent(BaseExecutor):
             except (ffmpeg.Error, OSError) as e:
                 print(f"📸 [Cinematographer] Frame extraction at {pct:.0%} failed: {e}")
         return frames
+
+    def _reconcile_with_previous_frame(
+        self,
+        plan: ShotExecutionPlan,
+        last_frame_path: str,
+    ) -> tuple:
+        """Analyze previous shot's last frame and reconcile the current shot plan.
+
+        Returns:
+            (reuse_last_frame, updated_plan): If reuse is True, the last frame
+            should be used as the keyframe directly. Plan is always updated to
+            reflect the actual state visible in the last frame.
+        """
+        print(
+            f"📸 [Cinematographer] Reconciling plan with previous shot's last frame..."
+        )
+        print(f"   Shot: {plan.shot_id}")
+        print(f"   Last frame: {last_frame_path}")
+
+        prompt = f"""You are a cinematographer analyzing the LAST FRAME of the previous shot to prepare for the NEXT shot.
+
+The attached image is the LAST FRAME (at 95% duration) of the previous shot's video.
+
+CURRENT SHOT PLAN (from the Director):
+- Shot ID: {plan.shot_id}
+- Shot Scale: {plan.shot_scale}
+- Camera Angle: {plan.camera_angle}
+- Camera Movement: {plan.camera_movement}
+- Action: {plan.action_description}
+- Staging: {plan.staging_description}
+- Character Poses: {json.dumps(plan.character_poses, ensure_ascii=False)}
+- Active Entities: {plan.active_entities}
+
+YOUR TASKS:
+
+1. DESCRIBE what you see in the attached last frame: character positions, postures (standing/sitting/etc), objects held, facing directions, environment state.
+
+2. DECIDE: Can this last frame be DIRECTLY REUSED as the starting keyframe for the current shot?
+   Answer YES (reuse_last_frame=true) ONLY if ALL of these conditions are met:
+   - The camera angle and shot scale in the last frame are reasonably compatible with the current shot plan
+   - The character positions and states visible in the frame are compatible with the current shot's intended action
+   - Using this frame would create smooth visual continuity
+   Answer NO (reuse_last_frame=false) if:
+   - The current shot requires a significantly different camera angle, scale, or framing
+   - Characters need to be shown from a different perspective or at a different scale
+   - The composition would be wrong for the planned action
+
+3. UPDATE the shot plan to reflect REALITY from the last frame:
+   - Adjust staging_description to match what characters are actually doing/where they actually are in the last frame
+   - Adjust character_poses to match their actual posture/position/expression visible in the frame
+   - Adjust action_description: keep the INTENDED action but fix the STARTING STATE to begin from where the previous shot actually ended
+
+Respond in JSON:
+```json
+{{
+  "reuse_last_frame": true or false,
+  "reasoning": "brief explanation",
+  "updated_action_description": "the action with corrected starting state",
+  "updated_staging_description": "staging matching the last frame",
+  "updated_character_poses": [
+    {{"entity_id": "CharName", "pose": "standing, facing left, hands at sides"}}
+  ]
+}}
+```"""
+
+        physical_path = self.workspace.get_physical_path(last_frame_path)
+
+        t0 = time.time()
+        try:
+            result = self.llm.generate_structured(
+                prompt=prompt,
+                response_schema=RECONCILIATION_SCHEMA,
+                media_path=physical_path,
+            )
+        except Exception as e:
+            print(f"📸 [Cinematographer] Reconciliation LLM call failed: {e}")
+            return False, plan
+
+        elapsed = time.time() - t0
+
+        reuse = result.get("reuse_last_frame", False)
+        reasoning = result.get("reasoning", "")
+        print(f"📸 [Cinematographer] Reconciliation result ({elapsed:.1f}s):")
+        print(f"   Reuse last frame: {reuse}")
+        print(f"   Reasoning: {reasoning}")
+
+        updated_plan = plan.model_copy()
+        if result.get("updated_action_description"):
+            updated_plan.action_description = result["updated_action_description"]
+        if result.get("updated_staging_description"):
+            updated_plan.staging_description = result["updated_staging_description"]
+        if result.get("updated_character_poses"):
+            poses = result["updated_character_poses"]
+            if isinstance(poses, list):
+                updated_plan.character_poses = {
+                    p["entity_id"]: p["pose"] for p in poses if "entity_id" in p
+                }
+            elif isinstance(poses, dict):
+                updated_plan.character_poses = poses
+
+        if updated_plan.action_description != plan.action_description:
+            print(f"   Updated action: {updated_plan.action_description[:200]}")
+        if updated_plan.staging_description != plan.staging_description:
+            print(f"   Updated staging: {updated_plan.staging_description[:200]}")
+        if updated_plan.character_poses != plan.character_poses:
+            print(f"   Updated poses: {updated_plan.character_poses}")
+
+        return reuse, updated_plan
+
+    def _persist_plan(self, plan: ShotExecutionPlan):
+        """Overwrite the shot plan JSON on disk."""
+        plan_path = f"04_production_slate/shots/{plan.shot_id}.json"
+        data = plan.model_dump()
+        # Convert character_poses dict back to list format for consistency with Director output
+        if isinstance(data.get("character_poses"), dict):
+            data["character_poses"] = [
+                {"entity_id": k, "pose": v} for k, v in data["character_poses"].items()
+            ]
+        self.workspace.write_json(plan_path, data)
+        print(f"📸 [Cinematographer] Persisted reconciled plan: {plan_path}")
 
     def generate_image_constrained(
         self,
@@ -160,6 +318,11 @@ CHARACTER POSITION CONTINUITY (CRITICAL for continuous scenes):
 - Avoid drastic changes in character relative positions between consecutive shots. If two characters were facing each other across a table, they remain in those positions.
 - When changing camera angle between shots, mentally rotate the spatial layout to ensure character left-right and near-far relationships are geometrically consistent from the new viewpoint.
 - Refer to the PREVIOUS SHOT reference frames to verify character positions before composing this frame.
+
+CHARACTER STATE CONTINUITY (CRITICAL — check previous shot end frame):
+- Character posture and action state MUST follow logically from the previous shot. If a character stood up in the previous shot, they MUST be standing in this shot — NOT sitting or lying down. If a character picked up an object, they must still be holding it. If a character walked to the door, they must be near the door.
+- Before composing, check the PREVIOUS SHOT END FRAME (95%) for each character's final posture (standing/sitting/lying/walking/holding), position, and facing direction. Your starting frame must be a plausible next moment in time.
+- State transitions that contradict the previous shot (e.g., standing→sitting without a sit-down action described, holding an object→empty hands) are HARD ERRORS that will cause the keyframe to be rejected.
 
 STARTING COMPOSITION (Frame 0):
 ACTION START: {plan.action_description}
@@ -276,6 +439,55 @@ def cinematographer_node(state: AFCState) -> Dict:
                 f"📸 [Cinematographer] Last frame extraction failed ({e}), falling back to standard generation"
             )
 
+    retry_count = state.get("render_retry_count", 0)
+    reconciled = False
+    if not plan.is_continuation and dailies and retry_count == 0:
+        prev_video = dailies[-1]
+        physical_prev = ws.get_physical_path(prev_video)
+        last_frame_dir = ws.get_physical_path(f"05_dailies/{plan.shot_id}")
+        os.makedirs(last_frame_dir, exist_ok=True)
+        last_frame_out = os.path.join(last_frame_dir, "reconcile_ref.png")
+        try:
+            probe = ffmpeg.probe(physical_prev)
+            duration = float(probe["format"]["duration"])
+            (
+                ffmpeg.input(physical_prev, ss=duration * 0.95)
+                .filter("scale", 1920, -1)
+                .output(last_frame_out, vframes=1)
+                .overwrite_output()
+                .run(quiet=True)
+            )
+            reconcile_frame_path = f"05_dailies/{plan.shot_id}/reconcile_ref.png"
+            reuse, updated_plan = agent._reconcile_with_previous_frame(
+                plan, reconcile_frame_path
+            )
+            agent._persist_plan(updated_plan)
+            plan = updated_plan
+            reconciled = True
+
+            if reuse:
+                keyframe_out_path = os.path.join(last_frame_dir, "keyframe_v1.png")
+                shutil.copy2(last_frame_out, keyframe_out_path)
+                keyframe_path = f"05_dailies/{plan.shot_id}/keyframe_v1.png"
+                print(
+                    f"📸 [Cinematographer] Reconciliation: reusing last frame as keyframe: {keyframe_path}"
+                )
+                print(
+                    f"📸 [Cinematographer] === NODE EXIT === keyframe={keyframe_path} (reconciled reuse)"
+                )
+                return {
+                    "current_keyframe_path": keyframe_path,
+                    "active_shot_plan": plan,
+                }
+            else:
+                print(
+                    f"📸 [Cinematographer] Reconciliation: plan updated, proceeding to keyframe generation"
+                )
+        except Exception as e:
+            print(
+                f"📸 [Cinematographer] Reconciliation frame extraction failed ({e}), skipping reconciliation"
+            )
+
     scene_id = extract_scene_id(plan.shot_id)
     lore = fetch_lore_context(
         ws, plan.active_entities, log_prefix="📸 [Cinematographer]"
@@ -290,15 +502,16 @@ def cinematographer_node(state: AFCState) -> Dict:
 
     # Identify last approved shot for continuity
     continuity_refs = []
-    dailies = state.get("scene_dailies_paths", [])
     if dailies:
         last_video = dailies[-1]
         continuity_refs = agent._extract_continuity_frames(last_video, plan.shot_id)
 
-    retry_count = state.get("render_retry_count", 0)
     keyframe_path = agent.generate_image_constrained(
         plan, lore, designs, continuity_refs, feedback=feedback, retry_count=retry_count
     )
 
     print(f"📸 [Cinematographer] === NODE EXIT === keyframe={keyframe_path}")
-    return {"current_keyframe_path": keyframe_path}
+    result: Dict[str, Any] = {"current_keyframe_path": keyframe_path}
+    if reconciled:
+        result["active_shot_plan"] = plan
+    return result
