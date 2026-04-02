@@ -75,9 +75,47 @@ class CinematographerAgent(BaseExecutor):
         master_style = load_master_style(self.workspace)
         _style_key, prefix, suffix = load_style_preset(self.project_config)
 
+        ref_manifest_lines = []
+        img_idx = 1
+        for d in designs:
+            if "/locations/" in d:
+                label = f"Image {img_idx}: LOCATION/ENVIRONMENT DESIGN — reference for the setting's architecture, layout, and atmosphere."
+            else:
+                entity_name = d.rsplit("/", 1)[-1].replace(".png", "")
+                label = f"Image {img_idx}: CHARACTER DESIGN for '{entity_name}' — reference for this character's appearance, clothing, and body type."
+            ref_manifest_lines.append(label)
+            img_idx += 1
+
         continuity_note = ""
         if continuity_refs:
-            continuity_note = "CRITICAL: Maintain ABSOLUTE visual and stylistic consistency with the PREVIOUS SHOT (refer to the attached video frames)."
+            ref_manifest_lines.append(
+                f"Image {img_idx}: PREVIOUS SHOT START FRAME (0%) — shows the environment and character state at the BEGINNING of the previous shot."
+            )
+            img_idx += 1
+            if len(continuity_refs) > 1:
+                ref_manifest_lines.append(
+                    f"Image {img_idx}: PREVIOUS SHOT MIDDLE FRAME (50%) — shows the environment and character state at the MIDPOINT of the previous shot."
+                )
+                img_idx += 1
+            if len(continuity_refs) > 2:
+                ref_manifest_lines.append(
+                    f"Image {img_idx}: PREVIOUS SHOT END FRAME (95%) — shows the environment and character state at the END of the previous shot."
+                )
+                img_idx += 1
+
+            continuity_note = """PREVIOUS SHOT CONTINUITY REFERENCE (CRITICAL — read carefully):
+The last 3 attached images are frames extracted from the PREVIOUS shot's video (start / middle / end).
+They are provided ONLY as reference for:
+  - Environment layout, lighting, and object placement continuity
+  - Character positions, clothing state, and emotional progression
+You MUST maintain logical continuity with the previous shot (e.g. same room layout, consistent character appearance, objects that were moved stay in their new positions).
+You MUST NOT directly copy or reproduce the composition, camera angle, or framing of these reference frames. This is a NEW shot with its own camera setup — compose it according to the shot plan below."""
+
+        ref_manifest = ""
+        if ref_manifest_lines:
+            ref_manifest = "ATTACHED REFERENCE IMAGES (in order):\n" + "\n".join(
+                ref_manifest_lines
+            )
 
         clothing_block = build_clothing_block(self.workspace, plan.character_poses)
 
@@ -94,6 +132,8 @@ class CinematographerAgent(BaseExecutor):
 STRICT RULE: This image MUST be the absolute STARTING FRAME (First Frame) of the shot.
 STRICT RULE: Generate ONE single focused cinematic shot. NO multi-panels, NO montages.
 STRICT RULE: Do NOT render any on-screen text, subtitles, captions, dialogue bubbles, manga speech balloons, narration text, watermarks, or any form of written words in the image. The output must be a PURE VISUAL frame with zero text elements.
+
+{ref_manifest}
 
 {continuity_note}
 {spatial_block}
