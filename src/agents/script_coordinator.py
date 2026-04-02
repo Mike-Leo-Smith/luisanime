@@ -83,6 +83,7 @@ def script_coordinator_node(state: AFCState) -> Dict:
             "current_proxy_path": None,
             "continuity_feedback": None,
             "render_retry_count": 0,
+            "keyframe_is_reused_frame": False,
         }
 
     active_shot_plan = unprocessed_shots[0]
@@ -108,4 +109,5 @@ def script_coordinator_node(state: AFCState) -> Dict:
         "current_proxy_path": None,
         "continuity_feedback": None,
         "render_retry_count": 0,
+        "keyframe_is_reused_frame": False,
     }
