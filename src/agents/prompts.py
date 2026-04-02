@@ -14,7 +14,8 @@ STRICT RULE: You MUST keep all character names, locations, and specific terminol
 3. Do not direct the camera; focus entirely on translating prose into observable narrative pacing and physical action.
 4. SCENE SPLITTING BY LOCATION (CRITICAL): Scenes must be split based on WHERE the action takes place, NOT by original chapter or paragraph boundaries. Every time the physical location changes (e.g. from a hallway to a living room, from indoors to outdoors, from one building to another), a new scene MUST begin. Conversely, continuous action in the same location should remain in a single scene even if it spans multiple paragraphs or chapters in the source material. The physical_location field is the primary scene boundary marker.
 5. If a scene at the same location is extremely long (more than 10 distinct actions), split it into logical sub-scenes at natural dramatic pauses, but keep the same physical_location.
-6. DIALOGUE DESIGN: Extract and design dialogue lines for each scene based on the original novel text.
+6. PACING AND CONCISENESS (CRITICAL): Aim for a brisk, cinematic rhythm. NOT every sentence or detail in the novel needs a dedicated action entry. Merge minor sequential actions into a single beat (e.g. "she stands up, walks to the window, and looks outside" is ONE action, not three). Omit purely descriptive prose that adds no narrative momentum — atmosphere and setting can be conveyed through the location description and temporal marker instead. Think like a film editor: keep only the beats that MOVE THE STORY FORWARD or reveal character.
+7. DIALOGUE DESIGN: Extract and design dialogue lines for each scene based on the original novel text.
    - Preserve existing dialogue from the novel verbatim (in the original language).
    - For scenes where the novel uses indirect speech or narrative summary of conversations, reconstruct plausible spoken dialogue that fits the characters and situation.
    - For internal monologues, convert them into either whispered self-talk (if the character is alone) or omit them and represent the emotion through physical actions instead.
@@ -34,7 +35,12 @@ STRICT RULE: Keep all character names, locations, and entity IDs in the ORIGINAL
 
 CINEMATIC FLUIDITY — Your shot sequence will be rendered as 5–10 second video clips stitched together. Every decision you make must serve SEAMLESS VISUAL FLOW:
 
-1. COMPLETE NARRATIVE COVERAGE: Every story beat, character action, and emotional shift in the scene MUST be captured. Do NOT skip or compress events — if the scene describes a character walking to a window, pausing, then turning back, that is at minimum 2 shots, not zero. Missing beats create jarring jumps in the final video.
+1. EFFICIENT NARRATIVE COVERAGE: Cover all KEY story beats and emotional turning points, but do NOT mechanically create a shot for every minor action. Multiple small actions can be combined into a single shot with camera movement or staging (e.g., a character crossing a room and picking up an object is one shot with a dolly follow, not two separate shots). Use cinematographic techniques to convey information efficiently:
+   - An establishing wide shot can set atmosphere, location, and character positions simultaneously.
+   - A slow push-in can convey growing tension without a dedicated "reaction shot."
+   - A pan or tilt can link two actions in one continuous take.
+   - Background action and foreground action in a single frame can advance two story threads at once.
+   Prioritize FLOW and RHYTHM over exhaustive coverage. A scene with 6 tight, well-paced shots is better than 12 redundant ones.
 
 2. SHOT-TO-SHOT CONTINUITY: The ending composition of Shot N must EXACTLY match the starting composition of Shot N+1. Describe character positions, facing directions, and environmental state at the END of each shot so the next shot can begin from that exact frame. Avoid "jump cuts" where a character teleports or changes posture without transition.
 
