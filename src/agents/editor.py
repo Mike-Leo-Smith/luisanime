@@ -83,15 +83,19 @@ def editor_node(state: AFCState) -> Dict:
     ws = AgenticWorkspace(state["workspace_root"])
     agent = EditorAgent.from_config(ws, state["project_config"])
 
-    scene_id = state["current_scene_path"].split("/")[-1].replace(".json", "")
-    master_path = agent.mux_scene(state["scene_dailies_paths"], scene_id)
+    if not scene_path:
+        print(f"✂️ [Editor] === NODE EXIT === No scene_path — skipping")
+        return {}
 
-    completed = [master_path]
+    scene_id = scene_path.split("/")[-1].replace(".json", "")
+    master_path = agent.mux_scene(state.get("scene_dailies_paths", []), scene_id)
+
+    completed = [master_path] if master_path else []
 
     print(f"✂️ [Editor] === NODE EXIT === master={master_path}")
     print(f"   Clearing scene_dailies_paths, current_scene_path")
     return {
         "completed_scenes_paths": completed,
-        "scene_dailies_paths": [],  # This needs to be a replacement, not addition.
+        "scene_dailies_paths": [],
         "current_scene_path": None,
     }

@@ -69,7 +69,8 @@ def run_pipeline(args):
     if final_state.get("last_error"):
         print(f"❌ Error: {final_state['last_error']}")
     else:
-        print(f"✅ Success! Final video: {final_state.get('final_video_path')}")
+        completed = final_state.get("completed_scenes_paths", [])
+        print(f"✅ Success! Completed scenes: {completed}")
 
 
 def status(args):

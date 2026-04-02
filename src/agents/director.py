@@ -48,6 +48,27 @@ SHOT_LIST_SCHEMA = {
                     },
                     "ending_composition_description": {"type": "STRING"},
                     "is_continuation": {"type": "BOOLEAN"},
+                    "shot_scale": {"type": "STRING"},
+                    "camera_angle": {"type": "STRING"},
+                    "spatial_composition": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "framing_type": {"type": "STRING"},
+                            "foreground_element": {"type": "STRING"},
+                            "midground_subject": {"type": "STRING"},
+                            "background_element": {"type": "STRING"},
+                            "depth_of_field": {"type": "STRING"},
+                            "composition_technique": {"type": "STRING"},
+                        },
+                        "required": [
+                            "framing_type",
+                            "foreground_element",
+                            "midground_subject",
+                            "background_element",
+                            "depth_of_field",
+                            "composition_technique",
+                        ],
+                    },
                 },
                 "required": [
                     "shot_id",
@@ -63,6 +84,9 @@ SHOT_LIST_SCHEMA = {
                     "dialogue",
                     "ending_composition_description",
                     "is_continuation",
+                    "shot_scale",
+                    "camera_angle",
+                    "spatial_composition",
                 ],
             },
         }
@@ -111,6 +135,26 @@ class DirectorAgent(BaseCreative):
         6. SPATIAL MAP: Maintain consistent character positions and object placement. If a character is on the left, they stay on the left unless they visibly walk to the right.
         7. ENDING COMPOSITION: The 'ending_composition_description' is CRITICAL — downstream agents use it to generate the next shot's starting frame. Describe the exact visual state: character positions, expressions, camera framing, lighting.
         
+        --- EDITING LOGIC (MANDATORY FOR EVERY SHOT) ---
+        
+        8. SHOT SCALE (shot_scale field): Set to exactly one of: extreme_wide, wide, medium, close, extreme_close.
+           Scale ordering: extreme_wide=1, wide=2, medium=3, close=4, extreme_close=5.
+           RULE: |shot_scale_N - shot_scale_N+1| >= 2. Consecutive shots MUST jump at least 2 levels.
+           Example: wide → close (OK, jump=2), medium → close (BAD, jump=1), extreme_wide → medium (OK, jump=2).
+        
+        9. CAMERA ANGLE (camera_angle field): Describe the camera's vertical angle and horizontal position relative to the subject.
+           Format: "[vertical]-angle [horizontal]" (e.g., "eye-level frontal", "low-angle 45-degree side", "high-angle over-shoulder", "bird's-eye overhead").
+           30-DEGREE RULE: If consecutive shots show the SAME subject, camera_angle must shift by >30 degrees to avoid jump cuts.
+        
+        10. SPATIAL COMPOSITION (spatial_composition object — REQUIRED for every shot):
+            Plan explicit depth layers to create 3D perception:
+            - framing_type: dominant strategy (foreground_framing, depth_separation, leading_lines, negative_space, chiaroscuro, silhouette, standard)
+            - foreground_element: what's in the extreme foreground (blurred objects, shoulders, plants, architectural elements). Use "none" only for extreme_wide establishing shots.
+            - midground_subject: the primary subject with their action/pose
+            - background_element: environmental context behind the subject
+            - depth_of_field: lens/focus (e.g., "shallow f/1.4 bokeh", "deep f/16 all-in-focus", "rack focus FG→MG")
+            - composition_technique: one of foreground_framing, depth_of_field_separation, leading_lines, negative_space, chiaroscuro, rule_of_thirds, over_shoulder, dutch_angle
+        
         STRICT RULES:
         1. Keep character names, locations, and IDs in the ORIGINAL LANGUAGE (Chinese).
         2. Era Context: Precisely determine the specific historical era or setting.
@@ -155,6 +199,21 @@ class DirectorAgent(BaseCreative):
                 for d in dialogue
             ]
 
+            shot_data.setdefault("shot_scale", "")
+            shot_data.setdefault("camera_angle", "")
+            spatial = shot_data.get("spatial_composition", {})
+            if isinstance(spatial, dict):
+                shot_data["spatial_composition"] = {
+                    "framing_type": spatial.get("framing_type", ""),
+                    "foreground_element": spatial.get("foreground_element", ""),
+                    "midground_subject": spatial.get("midground_subject", ""),
+                    "background_element": spatial.get("background_element", ""),
+                    "depth_of_field": spatial.get("depth_of_field", ""),
+                    "composition_technique": spatial.get("composition_technique", ""),
+                }
+            else:
+                shot_data["spatial_composition"] = {}
+
             shot = ShotExecutionPlan(**shot_data)
             shots.append(shot)
 
@@ -164,7 +223,7 @@ class DirectorAgent(BaseCreative):
 
             dialogue_count = len(shot_data["dialogue"])
             print(
-                f"   🎞️ {shot.shot_id}: {shot.camera_movement} | duration={shot.target_duration_ms}ms | entities={shot.active_entities} | continuation={shot.is_continuation} | dialogue={dialogue_count} lines"
+                f"   🎞️ {shot.shot_id}: {shot.camera_movement} | scale={shot.shot_scale} | angle={shot.camera_angle} | duration={shot.target_duration_ms}ms | entities={shot.active_entities} | continuation={shot.is_continuation} | dialogue={dialogue_count} lines"
             )
 
         print(
@@ -202,9 +261,9 @@ def director_node(state: AFCState) -> Dict:
     )
     shots = agent.write_shot_plan(scene_data)
 
-    unprocessed_scenes = state.get("unprocessed_scenes", [])
-    if current_scene_path in unprocessed_scenes:
-        unprocessed_scenes.remove(current_scene_path)
+    unprocessed_scenes = [
+        s for s in state.get("unprocessed_scenes", []) if s != current_scene_path
+    ]
 
     print(
         f"🎬 [Director] === NODE EXIT === {len(shots)} shots created, {len(unprocessed_scenes)} scenes remaining"

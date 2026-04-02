@@ -2,7 +2,6 @@ import base64
 import time
 import jwt
 import requests
-from pathlib import Path
 from typing import Optional, Dict, Any
 
 from .base import (

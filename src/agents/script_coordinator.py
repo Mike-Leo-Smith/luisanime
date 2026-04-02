@@ -76,7 +76,14 @@ def script_coordinator_node(state: AFCState) -> Dict:
     if not unprocessed_shots:
         print("📖 [Script Coordinator] End of shot list for this scene.")
         print(f"📖 [Script Coordinator] === NODE EXIT === active_shot_plan=None (done)")
-        return {"active_shot_plan": None}
+        return {
+            "active_shot_plan": None,
+            "current_render_path": None,
+            "current_keyframe_path": None,
+            "current_proxy_path": None,
+            "continuity_feedback": None,
+            "render_retry_count": 0,
+        }
 
     active_shot_plan = unprocessed_shots[0]
     remaining = unprocessed_shots[1:]

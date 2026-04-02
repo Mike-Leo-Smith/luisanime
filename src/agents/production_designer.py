@@ -4,6 +4,7 @@ from src.agents.base import BaseCreative
 from src.pipeline.state import AFCState
 from src.providers.base import ImageGenerationConfig
 from src.agents.prompts import PRODUCTION_DESIGNER_PROMPT
+from src.agents.shared import extract_scene_id, load_master_style, load_style_preset
 
 
 class ProductionDesignerAgent(BaseCreative):
@@ -16,7 +17,7 @@ class ProductionDesignerAgent(BaseCreative):
             f"   Novel context length: {len(novel_context)} chars (using first 20000)"
         )
 
-        style_key = self.project_config.get("video", {}).get("style", "cinematic")
+        style_key, _prefix, _suffix = load_style_preset(self.project_config)
         preset = self.project_config.get("style_presets", {}).get(style_key, {})
         print(f"   Style key: {style_key}")
 
@@ -63,10 +64,7 @@ Novel Excerpt:
         )
         print(f"   Description: {description[:200]}...")
 
-        style_key = self.project_config.get("video", {}).get("style", "cinematic")
-        preset = self.project_config.get("style_presets", {}).get(style_key, {})
-        prefix = preset.get("prompt_prefix", "")
-        suffix = preset.get("prompt_suffix", "")
+        _style_key, prefix, suffix = load_style_preset(self.project_config)
 
         prompt = f"{prefix} A high-quality concept art character/environment design sheet. Subject: {entity_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}. White background, clear details, single focus."
 
@@ -111,10 +109,7 @@ Novel Excerpt:
         )
         print(f"   Description: {description[:200]}...")
 
-        style_key = self.project_config.get("video", {}).get("style", "cinematic")
-        preset = self.project_config.get("style_presets", {}).get(style_key, {})
-        prefix = preset.get("prompt_prefix", "")
-        suffix = preset.get("prompt_suffix", "")
+        _style_key, prefix, suffix = load_style_preset(self.project_config)
 
         prompt = f"{prefix} A high-quality cinematic concept art of a location/environment. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}. Wide establishing shot, detailed architecture and atmosphere, no characters."
 
@@ -171,17 +166,12 @@ def production_designer_node(state: AFCState) -> Dict:
         print(
             f"🎨 [Production Designer] Master style already exists ({len(master_style)} chars)"
         )
-    except:
+    except FileNotFoundError:
         print(f"🎨 [Production Designer] No master style found — generating...")
         novel_text = state.get("novel_text", "")
         master_style = agent.generate_master_style(novel_text)
 
-    # Derive scene_id from shot_id (e.g. "scene_01_SHOT_001" -> "scene_01")
-    scene_id = None
-    if plan:
-        parts = plan.shot_id.rsplit("_SHOT_", 1)
-        if len(parts) == 2:
-            scene_id = parts[0]
+    scene_id = extract_scene_id(plan.shot_id) if plan else None
 
     scene_path = state.get("current_scene_path")
     novel_text = state.get("novel_text", "")

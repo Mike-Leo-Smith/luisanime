@@ -4,6 +4,7 @@ from src.agents.base import BaseExecutor
 from src.pipeline.state import AFCState, ShotExecutionPlan
 from src.providers.base import VideoGenerationConfig
 from src.agents.prompts import PREVIS_ARTIST_PROMPT
+from src.agents.shared import load_master_style
 
 
 class PrevisArtistAgent(BaseExecutor):
@@ -13,10 +14,7 @@ class PrevisArtistAgent(BaseExecutor):
             f"   Camera: {plan.camera_movement} | Duration: {plan.target_duration_ms}ms"
         )
 
-        try:
-            master_style = self.workspace.read_file("03_lore_bible/master_style.md")
-        except:
-            master_style = "Cinematic, high fidelity."
+        master_style = load_master_style(self.workspace)
 
         prompt = f"Master Style: {master_style}. Structural proxy video focusing on blocking and motion: {plan.camera_movement}. Action: {plan.action_description}. Entities: {plan.active_entities}. Low fidelity, skeletal motion."
 

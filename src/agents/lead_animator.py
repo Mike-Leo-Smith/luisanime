@@ -1,11 +1,21 @@
 from typing import Dict, List, Optional
 import os
 import time
+from pathlib import PurePosixPath
 import ffmpeg
 from src.agents.base import BaseExecutor
 from src.pipeline.state import AFCState, ShotExecutionPlan
 from src.providers.base import VideoGenerationConfig
 from src.agents.prompts import LEAD_ANIMATOR_PROMPT
+from src.agents.shared import (
+    extract_scene_id,
+    load_master_style,
+    load_style_preset,
+    fetch_all_design_references,
+    build_appearance_block,
+    build_dialogue_block_video,
+    build_spatial_block,
+)
 
 
 class LeadAnimatorAgent(BaseExecutor):
@@ -44,51 +54,6 @@ class LeadAnimatorAgent(BaseExecutor):
             print(f"🎨 [Lead Animator] Could not load previous shot plan: {e}")
             return None
 
-    def _gather_reference_images(
-        self, plan: ShotExecutionPlan, scene_path: Optional[str] = None
-    ) -> List[str]:
-        scene_id = None
-        parts = plan.shot_id.rsplit("_SHOT_", 1)
-        if len(parts) == 2:
-            scene_id = parts[0]
-
-        refs = []
-        for entity_id in plan.active_entities:
-            if scene_id:
-                scene_design = (
-                    f"03_lore_bible/designs/scenes/{scene_id}/{entity_id}.png"
-                )
-                if self.workspace.exists(scene_design):
-                    refs.append(self.workspace.get_physical_path(scene_design))
-                    continue
-            path = f"03_lore_bible/designs/{entity_id}.png"
-            if self.workspace.exists(path):
-                refs.append(self.workspace.get_physical_path(path))
-
-        if scene_path:
-            try:
-                scene_data = self.workspace.read_json(scene_path)
-                location = scene_data.get("physical_location", "")
-                if location:
-                    safe_name = location.replace("/", "_").replace("\\", "_")
-                    if scene_id:
-                        scene_loc = f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
-                        if self.workspace.exists(scene_loc):
-                            refs.append(self.workspace.get_physical_path(scene_loc))
-                            print(
-                                f"🎨 [Lead Animator] Gathered {len(refs)} reference images: {[os.path.basename(r) for r in refs]}"
-                            )
-                            return refs
-                    loc_path = f"03_lore_bible/designs/locations/{safe_name}.png"
-                    if self.workspace.exists(loc_path):
-                        refs.append(self.workspace.get_physical_path(loc_path))
-            except Exception:
-                pass
-        print(
-            f"🎨 [Lead Animator] Gathered {len(refs)} reference images: {[os.path.basename(r) for r in refs]}"
-        )
-        return refs
-
     def _build_distillation_prompt(
         self,
         plan: ShotExecutionPlan,
@@ -96,31 +61,8 @@ class LeadAnimatorAgent(BaseExecutor):
         master_style: str,
         ref_labels: Optional[List[tuple]] = None,
     ) -> str:
-        appearance_lines = []
-        for entity_id, pose in plan.character_poses.items():
-            try:
-                lore = self.workspace.read_file(f"03_lore_bible/{entity_id}.md")
-                appearance_lines.append(
-                    f"- {entity_id}: {pose}. Appearance: {lore[:300]}"
-                )
-            except Exception:
-                appearance_lines.append(f"- {entity_id}: {pose}")
-        appearance_block = (
-            "\n".join(appearance_lines) if appearance_lines else "See keyframe image."
-        )
-
-        dialogue_block = ""
-        if hasattr(plan, "dialogue") and plan.dialogue:
-            dialogue_desc = []
-            for d in plan.dialogue:
-                speaker_desc = d.get("speaker", "a character")
-                emotion = d.get("emotion", "neutral")
-                line = d.get("line", "")
-                dialogue_desc.append(f'- {speaker_desc} ({emotion}): "{line}"')
-            dialogue_block = f"""
-        DIALOGUE DURING THIS SHOT (audio will be generated — include spoken lines EXACTLY as written in quotation marks):
-        {chr(10).join(dialogue_desc)}
-        The video model generates audio. You MUST include each dialogue line in your output using the format: the character says "exact line here". Also describe matching lip movement, facial expressions, and body language reflecting the emotion."""
+        appearance_block = build_appearance_block(self.workspace, plan.character_poses)
+        dialogue_block = build_dialogue_block_video(plan.dialogue or [])
 
         ref_block = ""
         if ref_labels:
@@ -131,6 +73,13 @@ class LeadAnimatorAgent(BaseExecutor):
         REFERENCE IMAGES (use these tokens to refer to character/environment reference images for visual consistency):
         {chr(10).join(ref_lines)}
         When describing a character's appearance or the environment, reference the corresponding image token so the video model maintains visual consistency."""
+
+        spatial_block = build_spatial_block(
+            plan.spatial_composition or {},
+            shot_scale=plan.shot_scale or "medium",
+            camera_angle=plan.camera_angle or "eye-level",
+            for_video=True,
+        )
 
         return f"""Combine the following cinematic instructions into a single PURELY PHYSICAL motion description in English for a video generation model.
         
@@ -157,6 +106,7 @@ class LeadAnimatorAgent(BaseExecutor):
         - If a character interacts with an object or another character, the contact point must be anatomically plausible and spatially consistent with the established layout.
         - Gaze direction and body orientation must match who/what the character is addressing at each moment.
         {ref_block}
+        {spatial_block}
         CHARACTER APPEARANCES AND POSES:
         {appearance_block}
         {dialogue_block}
@@ -180,22 +130,17 @@ class LeadAnimatorAgent(BaseExecutor):
             safe_prompt = f"Starting from <<<image_1>>>, {safe_prompt}"
             print(f"🎨 [Lead Animator] Injected <<<image_1>>> reference into prompt")
 
-        style_key = self.project_config.get("video", {}).get("style", "cinematic")
-        preset = self.project_config.get("style_presets", {}).get(style_key, {})
-        prefix = preset.get("prompt_prefix", "")
-        suffix = preset.get("prompt_suffix", "")
+        _style_key, prefix, suffix = load_style_preset(self.project_config)
 
         full_prompt = f"{prefix} {safe_prompt} {suffix}"
 
         # Kling API enforces 2500 char limit on prompt
         KLING_PROMPT_LIMIT = 2500
         if len(full_prompt) > KLING_PROMPT_LIMIT:
-            # Trim the distilled prompt (safe_prompt) to fit, preserving prefix and suffix
             overhead = len(prefix) + len(suffix) + 2  # 2 spaces
             max_safe_len = KLING_PROMPT_LIMIT - overhead
             if max_safe_len > 100:
                 safe_prompt = safe_prompt[:max_safe_len]
-                # Cut at last sentence boundary if possible
                 last_period = safe_prompt.rfind(".")
                 if last_period > max_safe_len * 0.7:
                     safe_prompt = safe_prompt[: last_period + 1]
@@ -276,12 +221,16 @@ class LeadAnimatorAgent(BaseExecutor):
         print(f"   Proxy: {proxy}")
         print(f"   Action prompt: {prompt[:200]}...")
 
-        try:
-            master_style = self.workspace.read_file("03_lore_bible/master_style.md")
-        except Exception:
-            master_style = "Cinematic, high fidelity."
+        master_style = load_master_style(self.workspace)
 
-        ref_paths = self._gather_reference_images(plan, scene_path)
+        ref_paths = fetch_all_design_references(
+            self.workspace,
+            plan.active_entities,
+            scene_path,
+            scene_id=extract_scene_id(plan.shot_id),
+            log_prefix="🎨 [Lead Animator]",
+            return_physical=True,
+        )
         ref_labels = self._build_ref_labels(plan, ref_paths)
 
         distillation_prompt = self._build_distillation_prompt(
@@ -319,12 +268,16 @@ class LeadAnimatorAgent(BaseExecutor):
         print(f"   Last frame: {last_frame_path}")
         print(f"   Merged action: {merged_action[:200]}...")
 
-        try:
-            master_style = self.workspace.read_file("03_lore_bible/master_style.md")
-        except Exception:
-            master_style = "Cinematic, high fidelity."
+        master_style = load_master_style(self.workspace)
 
-        ref_paths = self._gather_reference_images(current_plan, scene_path)
+        ref_paths = fetch_all_design_references(
+            self.workspace,
+            current_plan.active_entities,
+            scene_path,
+            scene_id=extract_scene_id(current_plan.shot_id),
+            log_prefix="🎨 [Lead Animator]",
+            return_physical=True,
+        )
         ref_labels = self._build_ref_labels(current_plan, ref_paths)
 
         distillation_prompt = self._build_distillation_prompt(
@@ -363,9 +316,7 @@ def lead_animator_node(state: AFCState) -> Dict:
     print(f"   current_proxy_path: {state.get('current_proxy_path')}")
     dailies = state.get("scene_dailies_paths", [])
     print(f"   scene_dailies_paths: {dailies}")
-    print(
-        f"   is_continuation: {getattr(plan, 'is_continuation', False) if plan else 'N/A'}"
-    )
+    print(f"   is_continuation: {plan.is_continuation if plan else 'N/A'}")
     print(f"{'=' * 60}")
 
     from src.pipeline.workspace import AgenticWorkspace
@@ -379,9 +330,12 @@ def lead_animator_node(state: AFCState) -> Dict:
 
     scene_path = state.get("current_scene_path")
 
-    if getattr(plan, "is_continuation", False) and dailies:
+    if plan.is_continuation and dailies:
         prev_video = dailies[-1]
-        prev_shot_id = prev_video.split("/")[-2] if "/" in prev_video else None
+        # Extract prev_shot_id robustly using path parts
+        prev_shot_id = (
+            PurePosixPath(prev_video).parent.name if "/" in prev_video else None
+        )
 
         if prev_shot_id:
             prev_plan = agent._load_previous_shot_plan(prev_shot_id)
@@ -420,7 +374,7 @@ def lead_animator_node(state: AFCState) -> Dict:
             print(
                 f"🎨 [Lead Animator] Could not determine previous shot ID, falling back to standard generation"
             )
-    elif getattr(plan, "is_continuation", False):
+    elif plan.is_continuation:
         print(
             f"🎨 [Lead Animator] is_continuation=True but no dailies available, falling back to standard generation"
         )

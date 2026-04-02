@@ -110,7 +110,8 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
                         f"  [GeminiProvider] Using cached file: {file.name} for {path.name} (hash match)"
                     )
                     return file
-            except:
+            except Exception:
+                # Cached file no longer exists on server, re-upload below
                 pass
 
         mime_type = "image/png"
