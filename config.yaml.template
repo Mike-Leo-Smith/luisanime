@@ -64,7 +64,7 @@ agents:
     llm: gemini-flash
     video: kling-video
   continuity_supervisor:
-    llm: gemini-pro
+    llm: gemini-flash
   editor:
     llm: gemini-flash
 
