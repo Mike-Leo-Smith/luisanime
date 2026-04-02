@@ -58,20 +58,32 @@ Novel Excerpt:
         description: str,
         master_style: str,
         scene_id: Optional[str] = None,
+        reference_paths: Optional[List[str]] = None,
     ) -> str:
         print(
             f"🎨 [Production Designer] Creating visual design for: {entity_name} (scene={scene_id or 'global'})"
         )
         print(f"   Description: {description[:200]}...")
+        if reference_paths:
+            print(f"   Reference images: {reference_paths}")
 
         _style_key, prefix, suffix = load_style_preset(self.project_config)
 
-        prompt = f"{prefix} A high-quality concept art character/environment design sheet. Subject: {entity_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}. White background, clear details, single focus."
+        ref_instruction = ""
+        if reference_paths:
+            ref_instruction = " IMPORTANT: Match the character's overall appearance, body type, and facial features shown in the reference image(s). Adapt clothing and expression to this scene's context while maintaining the same person's identity."
+
+        prompt = f"{prefix} A high-quality concept art character/environment design sheet. Subject: {entity_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} White background, clear details, single focus."
 
         if len(prompt) > 1400:
             prompt = prompt[:1400]
 
         config = ImageGenerationConfig()
+        if reference_paths:
+            config.reference_media = [
+                self.workspace.get_physical_path(p) for p in reference_paths
+            ]
+
         if scene_id:
             image_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity_name}.png"
         else:
@@ -103,20 +115,32 @@ Novel Excerpt:
         description: str,
         master_style: str,
         scene_id: Optional[str] = None,
+        reference_paths: Optional[List[str]] = None,
     ) -> str:
         print(
             f"🎨 [Production Designer] Creating location design for: {location_name} (scene={scene_id or 'global'})"
         )
         print(f"   Description: {description[:200]}...")
+        if reference_paths:
+            print(f"   Reference images: {reference_paths}")
 
         _style_key, prefix, suffix = load_style_preset(self.project_config)
 
-        prompt = f"{prefix} A high-quality cinematic concept art of a location/environment. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}. Wide establishing shot, detailed architecture and atmosphere, no characters."
+        ref_instruction = ""
+        if reference_paths:
+            ref_instruction = " IMPORTANT: Match the location's architectural style, color palette, and atmosphere shown in the reference panorama. Adapt lighting and weather to this scene's specific moment while maintaining the same place's identity."
+
+        prompt = f"{prefix} A high-quality cinematic concept art of a location/environment. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} Wide establishing shot, detailed architecture and atmosphere, no characters."
 
         if len(prompt) > 1400:
             prompt = prompt[:1400]
 
         config = ImageGenerationConfig()
+        if reference_paths:
+            config.reference_media = [
+                self.workspace.get_physical_path(p) for p in reference_paths
+            ]
+
         safe_name = location_name.replace("/", "_").replace("\\", "_")
         if scene_id:
             image_path = (
@@ -182,7 +206,85 @@ def production_designer_node(state: AFCState) -> Dict:
         except Exception as e:
             print(f"🎨 [Production Designer] ⚠️  Could not read scene: {e}")
 
-    # 2. Generate scene-specific location design
+    # 2. Generate master/global character designs for active entities
+    if plan:
+        for entity in plan.active_entities:
+            global_path = f"03_lore_bible/designs/{entity}.png"
+            if not ws.exists(global_path):
+                print(
+                    f"🎨 [Production Designer] Generating MASTER design for '{entity}'..."
+                )
+                extraction_prompt = f"""Extract a PURELY VISUAL, comprehensive physical description for the character/entity '{entity}' as described across the entire novel.
+                Include: facial features, typical clothing style, body type, age, hair, skin tone, and any distinguishing physical traits.
+                This is a MASTER reference — describe their DEFAULT canonical appearance, not scene-specific variations.
+                STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                
+                Novel Text:
+                {novel_text[:50000]}
+                """
+                t0 = time.time()
+                desc_resp = agent.llm.generate_text(
+                    extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
+                )
+                elapsed = time.time() - t0
+                clean_desc = desc_resp.text.replace("#", "").replace("**", "").strip()
+                if "Visual Description:" in clean_desc:
+                    clean_desc = clean_desc.split("Visual Description:")[1].strip()
+                print(
+                    f"🎨 [Production Designer] Master description for '{entity}' extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
+                )
+                try:
+                    agent.generate_design(entity, clean_desc[:500], master_style)
+                except Exception as e:
+                    print(
+                        f"🎨 [Production Designer] ⚠️  Failed to generate master design for '{entity}': {e}"
+                    )
+            else:
+                print(
+                    f"🎨 [Production Designer] Master design already exists for '{entity}' — skipping"
+                )
+
+    # 3. Generate master/global location panorama
+    if scene_data:
+        location = scene_data.get("physical_location", "")
+        if location:
+            safe_name = location.replace("/", "_").replace("\\", "_")
+            global_loc_path = f"03_lore_bible/designs/locations/{safe_name}.png"
+            if not ws.exists(global_loc_path):
+                print(
+                    f"🎨 [Production Designer] Generating MASTER panorama for location '{location}'..."
+                )
+                extraction_prompt = f"""Extract a PURELY VISUAL description of the location '{location}' as described across the entire novel.
+                Include: architectural style, interior/exterior details, typical lighting, color palette, atmosphere, and distinctive features.
+                This is a MASTER reference — describe the location's canonical, default appearance (e.g. daytime, neutral weather).
+                STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                
+                Novel Text:
+                {novel_text[:50000]}
+                """
+                t0 = time.time()
+                desc_resp = agent.llm.generate_text(
+                    extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
+                )
+                elapsed = time.time() - t0
+                clean_desc = desc_resp.text.replace("#", "").replace("**", "").strip()
+                print(
+                    f"🎨 [Production Designer] Master location '{location}' description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
+                )
+                try:
+                    agent.generate_location_design(
+                        location, clean_desc[:500], master_style
+                    )
+                except Exception as e:
+                    print(
+                        f"🎨 [Production Designer] ⚠️  Failed to generate master location design for '{location}': {e}"
+                    )
+            else:
+                print(
+                    f"🎨 [Production Designer] Master panorama already exists for '{location}' — skipping"
+                )
+
+    # 4. Generate scene-specific location design (referencing master panorama)
     if scene_data and scene_id:
         location = scene_data.get("physical_location", "")
         if location:
@@ -191,6 +293,9 @@ def production_designer_node(state: AFCState) -> Dict:
                 f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
             )
             if not ws.exists(scene_loc_path):
+                master_loc_ref = f"03_lore_bible/designs/locations/{safe_name}.png"
+                ref_paths = [master_loc_ref] if ws.exists(master_loc_ref) else None
+
                 print(
                     f"🎨 [Production Designer] Generating scene-specific location design for '{location}' (scene={scene_id})..."
                 )
@@ -214,7 +319,11 @@ def production_designer_node(state: AFCState) -> Dict:
                 )
                 try:
                     agent.generate_location_design(
-                        location, clean_desc[:500], master_style, scene_id=scene_id
+                        location,
+                        clean_desc[:500],
+                        master_style,
+                        scene_id=scene_id,
+                        reference_paths=ref_paths,
                     )
                 except Exception as e:
                     print(
@@ -225,7 +334,7 @@ def production_designer_node(state: AFCState) -> Dict:
                     f"🎨 [Production Designer] Scene location design already exists for '{location}' (scene={scene_id}) — skipping"
                 )
 
-    # 3. Generate scene-specific entity designs
+    # 5. Generate scene-specific entity designs (referencing master character sheets)
     if plan and scene_id:
         scene_context_str = ""
         if scene_data:
@@ -234,6 +343,9 @@ def production_designer_node(state: AFCState) -> Dict:
         for entity in plan.active_entities:
             scene_design_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity}.png"
             if not ws.exists(scene_design_path):
+                master_ref = f"03_lore_bible/designs/{entity}.png"
+                ref_paths = [master_ref] if ws.exists(master_ref) else None
+
                 print(
                     f"🎨 [Production Designer] Generating scene-specific design for '{entity}' (scene={scene_id})..."
                 )
@@ -260,7 +372,11 @@ def production_designer_node(state: AFCState) -> Dict:
                 )
                 try:
                     agent.generate_design(
-                        entity, clean_desc[:500], master_style, scene_id=scene_id
+                        entity,
+                        clean_desc[:500],
+                        master_style,
+                        scene_id=scene_id,
+                        reference_paths=ref_paths,
                     )
                 except Exception as e:
                     print(

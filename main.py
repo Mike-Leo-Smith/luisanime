@@ -11,6 +11,30 @@ from src.pipeline.state import AFCState, FinancialLedger
 from src.pipeline.graph import app as pipeline_app
 
 
+class TeeStream:
+    """Duplicates writes to both the original stream and a log file."""
+
+    def __init__(self, original, log_file):
+        self._original = original
+        self._log_file = log_file
+
+    def write(self, data):
+        self._original.write(data)
+        self._original.flush()
+        self._log_file.write(data)
+        self._log_file.flush()
+
+    def flush(self):
+        self._original.flush()
+        self._log_file.flush()
+
+    def fileno(self):
+        return self._original.fileno()
+
+    def isatty(self):
+        return False
+
+
 def create_project(args):
     pm = ProjectManager(args.projects_dir)
     config = {
@@ -63,14 +87,27 @@ def _get_initial_state(args, pm) -> AFCState:
 def run_pipeline(args):
     pm = ProjectManager(args.projects_dir)
     state = _get_initial_state(args, pm)
-    print(f"🚀 Starting Autonomous Pipeline: {args.name}")
-    # LangGraph handles the storyboard -> animate -> QA loop per shot
-    final_state = pipeline_app.invoke(state)
-    if final_state.get("last_error"):
-        print(f"❌ Error: {final_state['last_error']}")
-    else:
-        completed = final_state.get("completed_scenes_paths", [])
-        print(f"✅ Success! Completed scenes: {completed}")
+
+    log_path = Path(state["workspace_root"]) / "pipeline.log"
+    log_file = open(log_path, "w", encoding="utf-8")
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = TeeStream(old_stdout, log_file)
+    sys.stderr = TeeStream(old_stderr, log_file)
+
+    try:
+        print(f"🚀 Starting Autonomous Pipeline: {args.name}")
+        print(f"📝 Logging to: {log_path}")
+        final_state = pipeline_app.invoke(state)
+        if final_state.get("last_error"):
+            print(f"❌ Error: {final_state['last_error']}")
+        else:
+            completed = final_state.get("completed_scenes_paths", [])
+            print(f"✅ Success! Completed scenes: {completed}")
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        log_file.close()
+        print(f"📝 Full log saved to: {log_path}")
 
 
 def status(args):

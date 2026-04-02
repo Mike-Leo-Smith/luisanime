@@ -3,6 +3,15 @@ import operator
 from pydantic import BaseModel, Field
 
 
+def _replace(existing, new):
+    """Last-writer-wins reducer for LangGraph state channels.
+
+    Must be a named function — anonymous lambdas create distinct objects
+    per field which breaks LangGraph's channel deduplication on Python 3.14+.
+    """
+    return new
+
+
 class FinancialLedger(BaseModel):
     project_budget_usd: float = 100.0
     accumulated_cost_usd: float = 0.0
@@ -39,32 +48,25 @@ class ShotExecutionPlan(BaseModel):
 
 
 class AFCState(TypedDict):
-    workspace_root: Annotated[str, lambda x, y: y]
-    project_config: Annotated[Dict[str, Any], lambda x, y: y]
-    ledger: Annotated[FinancialLedger, lambda x, y: y]
-    novel_text: Annotated[str, lambda x, y: y]
+    workspace_root: Annotated[str, _replace]
+    project_config: Annotated[Dict[str, Any], _replace]
+    ledger: Annotated[FinancialLedger, _replace]
+    novel_text: Annotated[str, _replace]
 
-    # Macro Queue (Scenes) - Replace with new list
-    unprocessed_scenes: Annotated[List[str], lambda x, y: y]
-    current_scene_path: Annotated[Optional[str], lambda x, y: y]
+    unprocessed_scenes: Annotated[List[str], _replace]
+    current_scene_path: Annotated[Optional[str], _replace]
 
-    # Micro Queue (Shots)
-    unprocessed_shots: Annotated[List[ShotExecutionPlan], lambda x, y: y]
-    active_shot_plan: Annotated[Optional[ShotExecutionPlan], lambda x, y: y]
+    unprocessed_shots: Annotated[List[ShotExecutionPlan], _replace]
+    active_shot_plan: Annotated[Optional[ShotExecutionPlan], _replace]
 
-    # Media State (Active Shot)
-    current_proxy_path: Annotated[Optional[str], lambda x, y: y]
-    current_keyframe_path: Annotated[Optional[str], lambda x, y: y]
-    current_render_path: Annotated[Optional[str], lambda x, y: y]
+    current_proxy_path: Annotated[Optional[str], _replace]
+    current_keyframe_path: Annotated[Optional[str], _replace]
+    current_render_path: Annotated[Optional[str], _replace]
 
-    # Asset Assembly
-    scene_dailies_paths: Annotated[
-        List[str], lambda x, y: y
-    ]  # Use replacement to allow clearing
+    scene_dailies_paths: Annotated[List[str], _replace]
     completed_scenes_paths: Annotated[List[str], operator.add]
 
-    # Feedback & Escalation
-    previs_retry_count: Annotated[int, lambda x, y: y]
-    render_retry_count: Annotated[int, lambda x, y: y]
-    continuity_feedback: Annotated[Optional[str], lambda x, y: y]
-    escalation_required: Annotated[bool, lambda x, y: y]
+    previs_retry_count: Annotated[int, _replace]
+    render_retry_count: Annotated[int, _replace]
+    continuity_feedback: Annotated[Optional[str], _replace]
+    escalation_required: Annotated[bool, _replace]
