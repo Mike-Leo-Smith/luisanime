@@ -2,6 +2,8 @@ import base64
 import time
 import jwt
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional, Dict, Any
 
 from .base import (
@@ -9,6 +11,27 @@ from .base import (
     VideoResponse,
     VideoGenerationConfig,
 )
+
+
+def _requests_session_with_retry(
+    retries: int = 3,
+    backoff_factor: float = 1.0,
+    status_forcelist: tuple = (502, 503, 504),
+) -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=["GET", "POST"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 class KlingProvider(BaseVideoProvider):
@@ -40,6 +63,7 @@ class KlingProvider(BaseVideoProvider):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.mode = mode
+        self._session = _requests_session_with_retry()
 
     def _generate_jwt_token(self) -> str:
         """Generate a JWT token for Kling API authentication.
@@ -183,7 +207,7 @@ class KlingProvider(BaseVideoProvider):
         print(f"  [Kling] Prompt contains image reference tokens: {has_image_ref}")
 
         headers = self._get_auth_headers()
-        response = requests.post(url, headers=headers, json=payload)
+        response = self._session.post(url, headers=headers, json=payload, timeout=60)
         if not response.ok:
             error_detail = ""
             try:
@@ -207,7 +231,7 @@ class KlingProvider(BaseVideoProvider):
 
         # Download the video (URLs expire in 30 days, download immediately)
         print(f"  [Kling] Downloading video from {video_url[:80]}...")
-        video_response = requests.get(video_url)
+        video_response = self._session.get(video_url, timeout=120)
         video_response.raise_for_status()
 
         # Use actual duration from API if available, otherwise config value
@@ -249,7 +273,15 @@ class KlingProvider(BaseVideoProvider):
 
         while time.time() - start_time < timeout:
             headers = self._get_auth_headers()
-            response = requests.get(url, headers=headers)
+            try:
+                response = self._session.get(url, headers=headers, timeout=30)
+            except (requests.ConnectionError, requests.Timeout) as e:
+                elapsed = int(time.time() - start_time)
+                print(
+                    f"  [Kling] Poll request failed ({e}), retrying in {interval}s... ({elapsed}s elapsed)"
+                )
+                time.sleep(interval)
+                continue
             if not response.ok:
                 error_detail = ""
                 try:
@@ -312,6 +344,6 @@ class KlingProvider(BaseVideoProvider):
         """
         url = f"{self.base_url}/v1/videos/omni-video/{task_id}"
         headers = self._get_auth_headers()
-        response = requests.get(url, headers=headers)
+        response = self._session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         return response.json()

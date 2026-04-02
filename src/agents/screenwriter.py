@@ -19,6 +19,7 @@ SCENE_SCHEMA = {
                     "era_context": {
                         "type": "STRING"
                     },  # Added for transmigration/time-travel support
+                    "tone": {"type": "STRING"},
                     "active_entities": {"type": "ARRAY", "items": {"type": "STRING"}},
                     "actions": {"type": "ARRAY", "items": {"type": "STRING"}},
                     "dialogue": {

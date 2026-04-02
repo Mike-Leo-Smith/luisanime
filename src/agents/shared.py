@@ -138,7 +138,7 @@ def build_clothing_block(
         try:
             lore = workspace.read_file(f"03_lore_bible/{entity_id}.md")
             clothing_lines.append(
-                f"{entity_id}: {pose}. Appearance from lore: {lore[:300]}"
+                f"{entity_id}: {pose}. Appearance from lore: {lore[:1500]}"
             )
         except FileNotFoundError:
             clothing_lines.append(f"{entity_id}: {pose}")
@@ -154,7 +154,7 @@ def build_appearance_block(
     for entity_id, pose in character_poses.items():
         try:
             lore = workspace.read_file(f"03_lore_bible/{entity_id}.md")
-            appearance_lines.append(f"- {entity_id}: {pose}. Appearance: {lore[:300]}")
+            appearance_lines.append(f"- {entity_id}: {pose}. Appearance: {lore[:1500]}")
         except FileNotFoundError:
             appearance_lines.append(f"- {entity_id}: {pose}")
     return "\n".join(appearance_lines) if appearance_lines else "See keyframe image."

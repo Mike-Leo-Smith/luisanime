@@ -66,7 +66,7 @@ class AFCState(TypedDict):
     scene_dailies_paths: Annotated[List[str], _replace]
     completed_scenes_paths: Annotated[List[str], operator.add]
 
-    previs_retry_count: Annotated[int, _replace]
+    keyframe_retry_count: Annotated[int, _replace]
     render_retry_count: Annotated[int, _replace]
     continuity_feedback: Annotated[Optional[str], _replace]
     escalation_required: Annotated[bool, _replace]

@@ -54,17 +54,17 @@ agents:
     llm: gemini-flash
     image: gemini-image
   director:
-    llm: gemini-flash
+    llm: gemini-pro
   script_coordinator:
     llm: gemini-flash
   cinematographer:
-    llm: gemini-flash
+    llm: gemini-pro
     image: gemini-image
   lead_animator:
     llm: gemini-flash
     video: kling-video
   continuity_supervisor:
-    llm: gemini-flash
+    llm: gemini-pro
   editor:
     llm: gemini-flash
 
