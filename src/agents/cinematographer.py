@@ -5,6 +5,17 @@ from src.agents.base import BaseExecutor
 from src.pipeline.state import AFCState, ShotExecutionPlan
 from src.providers.base import ImageGenerationConfig
 from src.agents.prompts import CINEMATOGRAPHER_PROMPT
+from src.agents.shared import (
+    extract_scene_id,
+    load_master_style,
+    load_style_preset,
+    fetch_lore_context,
+    fetch_design_references,
+    fetch_location_references,
+    build_clothing_block,
+    build_dialogue_block_keyframe,
+    build_spatial_block,
+)
 
 import ffmpeg
 import os
@@ -20,15 +31,14 @@ class CinematographerAgent(BaseExecutor):
         )
         os.makedirs(output_dir, exist_ok=True)
 
-        # Get duration
         try:
             probe = ffmpeg.probe(physical_video)
             duration = float(probe["format"]["duration"])
-        except:
+        except (ffmpeg.Error, KeyError, ValueError, OSError) as e:
+            print(f"📸 [Cinematographer] Could not probe video {video_path}: {e}")
             return []
 
         frames = []
-        # Extract at 0%, 50%, 95%
         for i, pct in enumerate([0, 0.5, 0.95]):
             out_path = os.path.join(output_dir, f"ref_{i}.png")
             try:
@@ -40,61 +50,9 @@ class CinematographerAgent(BaseExecutor):
                     .run(quiet=True)
                 )
                 frames.append(f"05_dailies/{shot_id}/continuity/ref_{i}.png")
-            except:
-                pass
+            except (ffmpeg.Error, OSError) as e:
+                print(f"📸 [Cinematographer] Frame extraction at {pct:.0%} failed: {e}")
         return frames
-
-    def fetch_lore_context(self, entities: List[str]) -> str:
-        """Retrieves active physical states from the Lore Bible."""
-        print(f"📸 [Cinematographer] Gathering lore for {entities}...")
-        context = []
-        for entity in entities:
-            try:
-                lore = self.workspace.read_file(f"03_lore_bible/{entity}.md")
-                context.append(lore)
-            except:
-                pass
-        return "\n".join(context)
-
-    def fetch_design_references(
-        self, entities: List[str], scene_id: Optional[str] = None
-    ) -> List[str]:
-        designs = []
-        for entity in entities:
-            if scene_id:
-                scene_path = f"03_lore_bible/designs/scenes/{scene_id}/{entity}.png"
-                if self.workspace.exists(scene_path):
-                    designs.append(scene_path)
-                    continue
-            path = f"03_lore_bible/designs/{entity}.png"
-            if self.workspace.exists(path):
-                designs.append(path)
-        return designs
-
-    def fetch_location_references(
-        self, scene_path: str, scene_id: Optional[str] = None
-    ) -> List[str]:
-        refs = []
-        try:
-            scene_data = self.workspace.read_json(scene_path)
-            location = scene_data.get("physical_location", "")
-            if location:
-                safe_name = location.replace("/", "_").replace("\\", "_")
-                if scene_id:
-                    scene_loc_path = f"03_lore_bible/designs/scenes/{scene_id}/locations/{safe_name}.png"
-                    if self.workspace.exists(scene_loc_path):
-                        refs.append(scene_loc_path)
-                        print(
-                            f"📸 [Cinematographer] Found scene location design: {scene_loc_path}"
-                        )
-                        return refs
-                path = f"03_lore_bible/designs/locations/{safe_name}.png"
-                if self.workspace.exists(path):
-                    refs.append(path)
-                    print(f"📸 [Cinematographer] Found location design: {path}")
-        except Exception as e:
-            print(f"📸 [Cinematographer] Could not load location design: {e}")
-        return refs
 
     def generate_image_constrained(
         self,
@@ -114,45 +72,23 @@ class CinematographerAgent(BaseExecutor):
         print(f"   Continuity refs: {continuity_refs}")
         print(f"   Feedback: {feedback[:200] if feedback else None}")
 
-        try:
-            master_style = self.workspace.read_file("03_lore_bible/master_style.md")
-        except:
-            master_style = "Cinematic, high fidelity."
-
-        video_cfg = self.project_config.get("video", {})
-        style_key = video_cfg.get("style", "cinematic")
-        preset = self.project_config.get("style_presets", {}).get(style_key, {})
-        prefix = preset.get("prompt_prefix", "")
-        suffix = preset.get("prompt_suffix", "")
+        master_style = load_master_style(self.workspace)
+        _style_key, prefix, suffix = load_style_preset(self.project_config)
 
         continuity_note = ""
         if continuity_refs:
             continuity_note = "CRITICAL: Maintain ABSOLUTE visual and stylistic consistency with the PREVIOUS SHOT (refer to the attached video frames)."
 
-        clothing_lines = []
-        for entity_id, pose in plan.character_poses.items():
-            try:
-                lore = self.workspace.read_file(f"03_lore_bible/{entity_id}.md")
-                clothing_lines.append(
-                    f"{entity_id}: {pose}. Appearance from lore: {lore[:300]}"
-                )
-            except:
-                clothing_lines.append(f"{entity_id}: {pose}")
-        clothing_block = (
-            "\n".join(clothing_lines) if clothing_lines else "See INITIAL POSES."
-        )
+        clothing_block = build_clothing_block(self.workspace, plan.character_poses)
 
-        dialogue_block = ""
-        if hasattr(plan, "dialogue") and plan.dialogue:
-            dialogue_lines = []
-            for d in plan.dialogue:
-                dialogue_lines.append(
-                    f'- {d.get("speaker", "Unknown")} ({d.get("emotion", "neutral")}): "{d.get("line", "")}"'
-                )
-            dialogue_block = f"""
-DIALOGUE IN THIS SHOT (use to inform character expressions and mouth positions):
-{chr(10).join(dialogue_lines)}
-Characters who are speaking should have appropriate mouth positions and facial expressions matching their emotion."""
+        dialogue_block = build_dialogue_block_keyframe(plan.dialogue or [])
+
+        spatial_block = build_spatial_block(
+            plan.spatial_composition or {},
+            shot_scale=plan.shot_scale or "medium",
+            camera_angle=plan.camera_angle or "eye-level frontal",
+            for_video=False,
+        )
 
         full_prompt = f"""{prefix} 
 STRICT RULE: This image MUST be the absolute STARTING FRAME (First Frame) of the shot.
@@ -160,6 +96,7 @@ STRICT RULE: Generate ONE single focused cinematic shot. NO multi-panels, NO mon
 STRICT RULE: Do NOT render any on-screen text, subtitles, captions, dialogue bubbles, manga speech balloons, narration text, watermarks, or any form of written words in the image. The output must be a PURE VISUAL frame with zero text elements.
 
 {continuity_note}
+{spatial_block}
 
 SPATIAL CONSISTENCY (CRITICAL — refer to the attached reference frames):
 Maintain strict spatial coherence with previous shots in the same location. Specifically:
@@ -206,6 +143,7 @@ TECHNICAL: 8k resolution, photorealistic, masterpiece. {suffix}"""
         physical_refs = [self.workspace.get_physical_path(p) for p in all_refs]
         print(f"📸 [Cinematographer] Reference images: {len(physical_refs)} files")
 
+        video_cfg = self.project_config.get("video", {})
         res_str = video_cfg.get("resolution", "1080p")
         width, height = 1920, 1080
         if res_str == "720p":
@@ -292,15 +230,16 @@ def cinematographer_node(state: AFCState) -> Dict:
                 f"📸 [Cinematographer] Last frame extraction failed ({e}), falling back to standard generation"
             )
 
-    lore = agent.fetch_lore_context(plan.active_entities)
-    scene_id = None
-    parts = plan.shot_id.rsplit("_SHOT_", 1)
-    if len(parts) == 2:
-        scene_id = parts[0]
-    designs = agent.fetch_design_references(plan.active_entities, scene_id=scene_id)
+    scene_id = extract_scene_id(plan.shot_id)
+    lore = fetch_lore_context(
+        ws, plan.active_entities, log_prefix="📸 [Cinematographer]"
+    )
+    designs = fetch_design_references(ws, plan.active_entities, scene_id=scene_id)
     scene_path = state.get("current_scene_path", "")
     if scene_path:
-        designs += agent.fetch_location_references(scene_path, scene_id=scene_id)
+        designs += fetch_location_references(
+            ws, scene_path, scene_id=scene_id, log_prefix="📸 [Cinematographer]"
+        )
     feedback = state.get("continuity_feedback")
 
     # Identify last approved shot for continuity
@@ -316,5 +255,4 @@ def cinematographer_node(state: AFCState) -> Dict:
     )
 
     print(f"📸 [Cinematographer] === NODE EXIT === keyframe={keyframe_path}")
-    # Return path to update state
     return {"current_keyframe_path": keyframe_path}

@@ -242,7 +242,10 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
                                 ):
                                     version_feedbacks[v] = report_text
                                     break
-                except:
+                except (FileNotFoundError, Exception) as e:
+                    print(
+                        f"🧐 [Continuity Supervisor] Could not parse QA log for best-of-N: {e}"
+                    )
                     version_feedbacks = {}
 
                 qa_entries = []

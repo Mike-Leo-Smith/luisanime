@@ -8,22 +8,6 @@ from .kling import KlingProvider
 
 
 class ProviderFactory:
-    _llm_providers: Dict[str, Any] = {}
-    _image_providers: Dict[str, Any] = {}
-    _video_providers: Dict[str, Any] = {}
-
-    @classmethod
-    def register_llm(cls, name: str, provider_class):
-        cls._llm_providers[name] = provider_class
-
-    @classmethod
-    def register_image(cls, name: str, provider_class):
-        cls._image_providers[name] = provider_class
-
-    @classmethod
-    def register_video(cls, name: str, provider_class):
-        cls._video_providers[name] = provider_class
-
     @classmethod
     def create_llm(cls, config: Dict[str, Any]) -> BaseLLMProvider:
         provider_type = config.get("provider", "gemini").lower()
@@ -88,7 +72,9 @@ class ProviderFactory:
             raise ValueError(f"Unknown video provider: {provider_type}")
 
     @classmethod
-    def _resolve_api_key(cls, key_or_env: str) -> str:
+    def _resolve_api_key(cls, key_or_env: Optional[str]) -> str:
+        if not key_or_env:
+            raise ValueError("API key not configured for provider")
         if key_or_env.startswith("ENV:"):
             env_var = key_or_env[4:]
             api_key = os.getenv(env_var)
@@ -96,11 +82,3 @@ class ProviderFactory:
                 raise ValueError(f"Environment variable {env_var} not set")
             return api_key
         return key_or_env
-
-
-ProviderFactory.register_llm("gemini", GeminiProvider)
-ProviderFactory.register_llm("openai", OpenAICompatibleProvider)
-ProviderFactory.register_image("gemini", GeminiProvider)
-ProviderFactory.register_image("minimax", MiniMaxProvider)
-ProviderFactory.register_video("minimax", MiniMaxProvider)
-ProviderFactory.register_video("kling", KlingProvider)

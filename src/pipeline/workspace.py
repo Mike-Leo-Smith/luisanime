@@ -3,9 +3,10 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+
 class AgenticWorkspace:
     """Virtual Filesystem Middleware for the Agentic Filming Company."""
-    
+
     def __init__(self, workspace_root: str):
         self.root = Path(workspace_root)
         self.vfs_map = {
@@ -15,7 +16,7 @@ class AgenticWorkspace:
             "03_lore_bible": "03_lore_bible",
             "04_production_slate": "04_production_slate",
             "05_dailies": "05_dailies",
-            "06_logs": "06_logs"
+            "06_logs": "06_logs",
         }
 
     def _resolve(self, virtual_path: str) -> Path:
@@ -23,7 +24,7 @@ class AgenticWorkspace:
         vdir = parts[0]
         if vdir not in self.vfs_map:
             raise ValueError(f"Invalid virtual directory: {vdir}")
-        
+
         rel_path = parts[1] if len(parts) > 1 else ""
         return self.root / self.vfs_map[vdir] / rel_path
 
@@ -53,7 +54,7 @@ class AgenticWorkspace:
         """Checks if a virtual path exists on the physical filesystem."""
         try:
             return self._resolve(virtual_path).exists()
-        except:
+        except (ValueError, OSError):
             return False
 
     def write_json(self, virtual_path: str, data: Any):
