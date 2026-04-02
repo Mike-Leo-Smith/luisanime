@@ -12,8 +12,9 @@ STRICT RULE: You MUST keep all character names, locations, and specific terminol
 1. Strip all internal monologues and translate them into visible physical actions or spoken dialogue.
 2. Every scene document must contain a temporal marker (e.g. DAY, NIGHT), a physical location descriptor, and a strict list of active entities.
 3. Do not direct the camera; focus entirely on translating prose into observable narrative pacing and physical action.
-4. If a scene is too long, split it into multiple logical scene documents.
-5. DIALOGUE DESIGN: Extract and design dialogue lines for each scene based on the original novel text.
+4. SCENE SPLITTING BY LOCATION (CRITICAL): Scenes must be split based on WHERE the action takes place, NOT by original chapter or paragraph boundaries. Every time the physical location changes (e.g. from a hallway to a living room, from indoors to outdoors, from one building to another), a new scene MUST begin. Conversely, continuous action in the same location should remain in a single scene even if it spans multiple paragraphs or chapters in the source material. The physical_location field is the primary scene boundary marker.
+5. If a scene at the same location is extremely long (more than 10 distinct actions), split it into logical sub-scenes at natural dramatic pauses, but keep the same physical_location.
+6. DIALOGUE DESIGN: Extract and design dialogue lines for each scene based on the original novel text.
    - Preserve existing dialogue from the novel verbatim (in the original language).
    - For scenes where the novel uses indirect speech or narrative summary of conversations, reconstruct plausible spoken dialogue that fits the characters and situation.
    - For internal monologues, convert them into either whispered self-talk (if the character is alone) or omit them and represent the emotion through physical actions instead.
@@ -126,7 +127,12 @@ SPATIAL LAYERING — Your prompt must preserve the Director's planned depth comp
 7. When spatial_composition data is provided (FG/MG/BG layers, framing_type, depth_of_field), encode these spatial layers into your motion description. The foreground element should remain visible and appropriately blurred/focused throughout the shot. The midground subject moves as described. The background provides consistent environmental context. Maintain the planned depth_of_field throughout.
 8. When shot_scale and camera_angle are provided, use them to frame your description accurately (e.g., "extreme close-up at a low angle" sets a very different visual than "wide shot at eye level").
 
-NEVER sacrifice character detail or dialogue for brevity. A 400-word prompt with complete character descriptions and dialogue produces far better video than a 150-word prompt that omits what characters are wearing or saying."""
+NEVER sacrifice character detail or dialogue for brevity. A 400-word prompt with complete character descriptions and dialogue produces far better video than a 150-word prompt that omits what characters are wearing or saying.
+
+AUDIO DIRECTION (CRITICAL — the video model generates audio from your prompt):
+9. ALLOWED audio: Scene ambient noise (room tone, wind, rain, traffic, nature), object interaction sounds (footsteps, door closing, glass clinking, tools, fabric rustling), character dialogue (exact spoken lines in quotation marks in the original language), and narration voiceover if applicable.
+10. STRICTLY FORBIDDEN audio: Background music, musical score, soundtrack, incidental music, mood music, dramatic stingers, cinematic booms, transition sound effects, or any sound that does not originate from a visible or logically present source in the scene. The generated video must sound like a raw production take with natural location audio only.
+11. Briefly describe the ambient soundscape of the scene (e.g., "quiet apartment interior with faint traffic noise outside" or "bustling street market with vendors calling") so the model generates realistic environmental sound."""
 
 CONTINUITY_SUPERVISOR_PROMPT = """You are the Continuity Supervisor. You are a ruthless quality assurance evaluator operating a two-tier validation system. 
 First, invoke execute_cv_topology_check on the rendered video. 

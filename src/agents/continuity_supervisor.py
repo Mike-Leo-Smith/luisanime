@@ -79,14 +79,18 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         Original Novel Context: {novel_context}
         
         Evaluation Criteria:
-        1. STARTING FRAME ACCURACY: Does the image accurately depict the EXACT starting state described?
+        1. STARTING FRAME ACCURACY: Does the image accurately depict the STARTING STATE described? Focus on the overall scene setup, not pixel-perfect pose matching.
         2. NOVEL CONFORMANCE: Does the image reflect characters and mood from the novel?
         3. AIGC ARTIFACTS: Check for mutated hands, floating limbs, distorted faces.
         4. SPATIAL CONSISTENCY: If reference frames from previous shots are available, verify that the room layout, furniture positions, door orientations, window locations, prop placements, and lighting direction remain consistent across angles. Flag any contradictions in the physical environment.
+        5. DUPLICATE / EXTRA ENTITIES (STRICT): Count the number of distinct people and prominent objects in the image. Compare against the shot plan's active_entities list and staging description. If there are MORE people than specified (e.g., 3 figures when only 2 characters are listed), or if a character appears duplicated (same person visible twice), or if there are conspicuous extra objects not described in the scene (e.g., an extra chair, a phantom limb, a floating item), this is a HARD FAIL. Duplicate or phantom entities are a critical AIGC hallucination artifact.
         
-        IMPORTANT: Mirror reflections are NATURALLY laterally inverted (left-right flipped). Do NOT flag mirrored handedness, reversed text in mirrors, or laterally inverted details as inconsistencies — this is physically correct behavior.
+        IMPORTANT TOLERANCE RULES:
+        - Mirror reflections are NATURALLY laterally inverted (left-right flipped). Do NOT flag mirrored handedness, reversed text in mirrors, or laterally inverted details as inconsistencies — this is physically correct behavior.
+        - Minor deviations in character pose, stance, body angle, or exact positioning relative to the textual description are ACCEPTABLE and should be considered reasonable artistic/cinematographic interpretation. Only flag pose issues if they fundamentally contradict the narrative (e.g., a character described as sitting is shown standing, or a character meant to face another is facing away).
+        - Slight differences in character spacing, hand placement, or head tilt compared to the description are NOT grounds for rejection — the cinematographer has creative latitude in composing the frame.
         
-        Respond with 'PASS' if perfect, or a detailed 'FAIL: [Reason]' if it needs regeneration."""
+        Respond with 'PASS' if the keyframe is acceptable (including minor artistic variations), or a detailed 'FAIL: [Reason]' ONLY for serious issues (AIGC artifacts, wrong characters, fundamentally wrong scene setup, broken spatial consistency)."""
 
         t0 = time.time()
         response = self.llm.analyze_image(

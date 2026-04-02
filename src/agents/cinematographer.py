@@ -155,6 +155,12 @@ SPATIAL PROPORTIONS AND CHARACTER RELATIONSHIPS (CRITICAL):
 - Gaze direction, head tilt, and body lean must match who the character is addressing or what they are observing.
 - If characters are in physical contact (touching, holding, pushing), the contact point must be anatomically plausible and consistent from both characters' perspectives.
 
+CHARACTER POSITION CONTINUITY (CRITICAL for continuous scenes):
+- In a continuous scene, characters do NOT teleport. If a character was on the left side of frame in the previous shot, they must still be on the left side (from the same spatial perspective) unless the shot plan explicitly describes them moving.
+- Avoid drastic changes in character relative positions between consecutive shots. If two characters were facing each other across a table, they remain in those positions.
+- When changing camera angle between shots, mentally rotate the spatial layout to ensure character left-right and near-far relationships are geometrically consistent from the new viewpoint.
+- Refer to the PREVIOUS SHOT reference frames to verify character positions before composing this frame.
+
 STARTING COMPOSITION (Frame 0):
 ACTION START: {plan.action_description}
 INITIAL STAGING: {plan.staging_description}
