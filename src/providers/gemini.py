@@ -23,6 +23,10 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         "gemini-2.0-flash": 0.075,
         "gemini-2.0-pro": 1.25,
         "gemini-2.0-flash-image": 0.075,
+        "gemini-2.5-flash": 0.15,
+        "gemini-2.5-pro": 1.25,
+        "gemini-3.1-pro-preview": 1.25,
+        "gemini-3.1-flash-image-preview": 0.075,
     }
 
     def __init__(
@@ -49,14 +53,18 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
         return (total_tokens / 1_000_000) * cost_per_million
 
     def _with_retry(self, func, *args, **kwargs):
-        """Generic retry wrapper for Gemini API calls."""
-        max_retries = 3
+        """Generic retry wrapper for Gemini API calls with rate-limit awareness."""
+        max_retries = 5
         for i in range(max_retries):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 err_str = str(e)
-                if any(
+                is_rate_limit = any(
+                    x in err_str
+                    for x in ["429", "RESOURCE_EXHAUSTED", "rate limit", "quota"]
+                )
+                is_transient = any(
                     x in err_str
                     for x in [
                         "RemoteProtocolError",
@@ -66,14 +74,23 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
                         "503",
                         "504",
                     ]
-                ):
-                    if i < max_retries - 1:
-                        wait = (i + 1) * 2
-                        print(
-                            f"  [GeminiProvider] Transient error: {e}. Retrying in {wait}s..."
-                        )
-                        time.sleep(wait)
-                        continue
+                )
+                if is_rate_limit and i < max_retries - 1:
+                    # Exponential backoff: 30s, 60s, 120s, 240s
+                    wait = min(30 * (2**i), 300)
+                    print(
+                        f"  [GeminiProvider] Rate limited (attempt {i + 1}/{max_retries}): {e}"
+                    )
+                    print(f"  [GeminiProvider] Waiting {wait}s before retry...")
+                    time.sleep(wait)
+                    continue
+                elif is_transient and i < max_retries - 1:
+                    wait = (i + 1) * 2
+                    print(
+                        f"  [GeminiProvider] Transient error: {e}. Retrying in {wait}s..."
+                    )
+                    time.sleep(wait)
+                    continue
                 raise e
 
     def _upload_media(self, media_path: str) -> Any:

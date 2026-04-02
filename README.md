@@ -17,7 +17,7 @@ By modeling the process after modern compiler infrastructures and physically-bas
 
 ## Tech Stack
 - **Orchestration**: LangGraph (Python) with cyclic workflow graphs
-- **Logic/Reasoning**: Gemini 3.1 Pro
+- **Logic/Reasoning**: Gemini 2.5 Flash (bulk agents), Gemini 3.1 Pro (vision QA)
 - **Vision QA**: Gemini 3.1 Pro (keyframe inspection)
 - **Image Generation**: Gemini 3.1 Flash Image Preview
 - **Video Generation**: Kling v3-omni (via JWT-authenticated API)
@@ -110,14 +110,14 @@ The pipeline automatically executes the full workflow:
 
 | Agent | Role | Providers | Responsibility |
 |-------|------|-----------|----------------|
-| **Screenwriter** | Creative | Gemini 3.1 Pro | Parses novel text into structured scene documents |
-| **Showrunner** | Orchestrator | Gemini 3.1 Pro | Routes workflow, manages budget, audits costs |
-| **Director** | Creative | Gemini 3.1 Pro | Generates shot plans with continuity and `is_continuation` marking |
-| **Script Coordinator** | Support | Gemini 3.1 Pro | Manages shot queue, tracks per-character state mutations |
-| **Production Designer** | Creative | Gemini 3.1 Pro + Gemini Image | Generates master style, character design sheets, location reference images |
-| **Cinematographer** | Creative | Gemini 3.1 Pro + Gemini Image | Generates starting-frame keyframes with design/location references |
+| **Screenwriter** | Creative | Gemini 2.5 Flash | Parses novel text into structured scene documents |
+| **Showrunner** | Orchestrator | Gemini 2.5 Flash | Routes workflow, manages budget, audits costs |
+| **Director** | Creative | Gemini 2.5 Flash | Generates shot plans with continuity and `is_continuation` marking |
+| **Script Coordinator** | Support | Gemini 2.5 Flash | Manages shot queue, tracks per-character state mutations |
+| **Production Designer** | Creative | Gemini 2.5 Flash + Gemini Image | Generates master style, character design sheets, location reference images |
+| **Cinematographer** | Creative | Gemini 2.5 Flash + Gemini Image | Generates starting-frame keyframes with design/location references |
 | **Continuity Supervisor** | QA | Gemini 3.1 Pro | VLM-based keyframe QA with best-of-N fallback |
-| **Lead Animator** | Creative | Gemini 3.1 Pro + Kling | Generates video from approved keyframes via Kling v3-omni |
+| **Lead Animator** | Creative | Gemini 2.5 Flash + Kling | Generates video from approved keyframes via Kling v3-omni |
 | **Editor** | Support | FFmpeg | Assembles per-scene master videos with scale/pad normalization |
 
 ### Shot Continuation
@@ -153,8 +153,12 @@ Editor ← Continuity Supervisor ← Lead Animator ← Cinematographer ← Produ
 models:
   gemini-flash:
     provider: "gemini"
-    model: "gemini-3.1-pro-preview"
+    model: "gemini-2.5-flash"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
+  gemini-pro:
+    provider: "gemini"
+    model: "gemini-3.1-pro-preview"
+    api_key: "ENV:GEMINI_PRO_API_KEY"
   gemini-image:
     provider: "gemini"
     model: "gemini-3.1-flash-image-preview"

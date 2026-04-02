@@ -18,7 +18,7 @@ generation:
 models:
   gemini-flash:
     provider: "gemini"
-    model: "gemini-3.1-pro-preview"
+    model: "gemini-2.5-flash"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
     temperature: 0.2
 

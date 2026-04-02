@@ -144,7 +144,7 @@ class LeadAnimatorAgent(BaseExecutor):
            d) Facial expression and gaze direction
         4. Start the description by referencing the starting keyframe image. Use the exact token <<<image_1>>> to refer to it.
            Example: "Starting from <<<image_1>>>, the camera slowly dollies forward as the figure raises their hand..."
-        5. The description should be DETAILED and thorough (350-450 words). Do NOT over-compress or omit character details. Every character's clothing, position, and action must be explicitly described — the video model cannot infer what it is not told.
+        5. The description should be DETAILED but CONCISE (250-350 words). Do NOT over-compress or omit character details, but avoid redundant adjectives and filler. Every character's clothing, position, and action must be explicitly described — the video model cannot infer what it is not told. The TOTAL prompt (including style prefix/suffix added later) must stay under 2500 characters.
         6. Include light quality, camera movement, and environmental atmosphere, but character appearance and action details take PRIORITY — never sacrifice character description for brevity.
         7. NEVER include any on-screen text, subtitles, captions, dialogue bubbles, narration overlays, or watermarks in the description. The output is a PURE VISUAL motion sequence with zero text elements.
         8. If characters are speaking, you MUST include their dialogue in your output. Write it as: the character says "exact spoken line here" (in the original language). The video model generates audio from your text, so spoken lines in quotation marks are essential for correct speech synthesis. Also describe lip movement, facial expressions, and body gestures matching the emotion of the dialogue.
@@ -186,6 +186,28 @@ class LeadAnimatorAgent(BaseExecutor):
         suffix = preset.get("prompt_suffix", "")
 
         full_prompt = f"{prefix} {safe_prompt} {suffix}"
+
+        # Kling API enforces 2500 char limit on prompt
+        KLING_PROMPT_LIMIT = 2500
+        if len(full_prompt) > KLING_PROMPT_LIMIT:
+            # Trim the distilled prompt (safe_prompt) to fit, preserving prefix and suffix
+            overhead = len(prefix) + len(suffix) + 2  # 2 spaces
+            max_safe_len = KLING_PROMPT_LIMIT - overhead
+            if max_safe_len > 100:
+                safe_prompt = safe_prompt[:max_safe_len]
+                # Cut at last sentence boundary if possible
+                last_period = safe_prompt.rfind(".")
+                if last_period > max_safe_len * 0.7:
+                    safe_prompt = safe_prompt[: last_period + 1]
+                full_prompt = f"{prefix} {safe_prompt} {suffix}"
+                print(
+                    f"🎨 [Lead Animator] Prompt truncated to {len(full_prompt)} chars (limit: {KLING_PROMPT_LIMIT})"
+                )
+            else:
+                full_prompt = full_prompt[:KLING_PROMPT_LIMIT]
+                print(
+                    f"🎨 [Lead Animator] Prompt hard-truncated to {KLING_PROMPT_LIMIT} chars"
+                )
 
         config = VideoGenerationConfig()
         config.enable_audio = True

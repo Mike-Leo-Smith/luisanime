@@ -145,12 +145,14 @@ class KlingProvider(BaseVideoProvider):
                 }
             )
 
+        # Reference images: NO type field per Kling docs
+        # ("如图片非首帧或尾帧，请勿配置 type 参数")
+        # Referenced in prompt via <<<image_N>>> tokens based on position in image_list
         if config.reference_images:
             for ref_path in config.reference_images:
                 image_list.append(
                     {
                         "image_url": self._encode_image_file(ref_path),
-                        "type": "reference",
                     }
                 )
 
@@ -176,7 +178,7 @@ class KlingProvider(BaseVideoProvider):
         )
         print(f"  [Kling] Prompt: {prompt[:500]}")
         print(
-            f"  [Kling] Image list: {len(image_list)} image(s) — types: {[img.get('type', 'reference') for img in image_list]}"
+            f"  [Kling] Image list: {len(image_list)} image(s) — types: {[img.get('type', 'reference_image') for img in image_list]}"
         )
         has_image_ref = "<<<image_" in prompt
         print(f"  [Kling] Prompt contains image reference tokens: {has_image_ref}")
