@@ -98,6 +98,10 @@ class LeadAnimatorAgent(BaseExecutor):
         7. NEVER include any on-screen text, subtitles, captions, dialogue bubbles, narration overlays, or watermarks in the description. The output is a PURE VISUAL motion sequence with zero text elements.
         8. If characters are speaking, you MUST include their dialogue in your output. Write it as: the character says "exact spoken line here" (in the original language). The video model generates audio from your text, so spoken lines in quotation marks are essential for correct speech synthesis. Also describe lip movement, facial expressions, and body gestures matching the emotion of the dialogue.
         9. Include the reference image tokens (<<<image_2>>>, <<<image_3>>>, etc.) when first describing each character or the environment, so the video model can match their visual appearance and the spatial layout.
+        10. AUDIO DIRECTION (CRITICAL): The video model generates audio. You MUST specify the sound design:
+            - ALLOWED sounds: Scene ambient noise (room tone, wind, rain, traffic, birds), object interaction sounds (footsteps, door creaking, cup clinking, typing, tools operating), character dialogue (spoken lines in quotation marks), narration voiceover (if applicable).
+            - STRICTLY FORBIDDEN: Background music, musical score, soundtrack, mood music, incidental music, sound effects that don't originate from visible objects in the scene (e.g., no "whoosh" transitions, no cinematic booms, no dramatic stingers).
+            - Describe the ambient soundscape briefly: e.g., "The quiet hum of fluorescent lights and distant traffic outside the window." This helps the model generate appropriate environmental audio without adding music.
         
         SPATIAL CONSISTENCY:
         - Maintain the spatial layout visible in the starting keyframe <<<image_1>>>. Object positions, furniture, and architectural features must not shift during the video.
