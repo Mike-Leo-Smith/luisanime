@@ -109,6 +109,14 @@ class BaseLLMProvider(ABC):
     ) -> LLMResponse:
         pass
 
+    def analyze_images(
+        self,
+        image_paths: list[str],
+        prompt: str,
+        config: Optional[GenerationConfig] = None,
+    ) -> LLMResponse:
+        return self.analyze_image(image_paths[0], prompt, config)
+
     @abstractmethod
     def analyze_video(
         self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None

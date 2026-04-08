@@ -348,6 +348,30 @@ class GeminiProvider(BaseLLMProvider, BaseImageProvider):
             text=response.text or "", usage={}, model=self.model, cost_usd=cost
         )
 
+    def analyze_images(
+        self,
+        image_paths: list[str],
+        prompt: str,
+        config: Optional[GenerationConfig] = None,
+    ) -> LLMResponse:
+        contents = []
+        for path in image_paths:
+            file = self._upload_media(path)
+            contents.append(
+                types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type)
+            )
+        contents.append(types.Part.from_text(text=prompt))
+
+        response = self._with_retry(
+            self.client.models.generate_content,
+            model=self.model,
+            contents=contents,
+        )
+        cost = self._estimate_cost(prompt, response.text or "")
+        return LLMResponse(
+            text=response.text or "", usage={}, model=self.model, cost_usd=cost
+        )
+
     def analyze_video(
         self, video_path: str, prompt: str, config: Optional[GenerationConfig] = None
     ) -> LLMResponse:
