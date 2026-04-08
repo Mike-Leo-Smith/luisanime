@@ -89,8 +89,8 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
            - CHARACTER POSITIONS: Same characters in roughly the same locations within the frame.
            - COMPOSITION/FRAMING: Same camera angle, shot scale, and spatial arrangement.
            - ENVIRONMENT: Same background, lighting, and setting details.
-           - CHARACTER APPEARANCE: Same clothing, hair, and overall look.
-           Minor stylistic differences in rendering quality are acceptable (the storyboard is a sketch-level guide, the keyframe is final quality). But the SCENE CONTENT, LAYOUT, and CHARACTER PLACEMENT must match. If the keyframe shows a fundamentally different composition, framing, or character arrangement than Panel 1 of the storyboard, this is a FAIL: "STORYBOARD MISMATCH: [describe the discrepancy]"."""
+           - CHARACTER IDENTITY (STRICT): Each character in the keyframe must be visually the SAME person as in the storyboard — same face (facial features, face shape, skin tone), same hairstyle (color, length, style), same clothing (outfit, colors, accessories). If a character's face, hair, or clothing visibly differs from the storyboard, flag it as: "CHARACTER IDENTITY MISMATCH: [character name] — [describe the difference]".
+           Minor stylistic differences in rendering quality are acceptable (the storyboard is a sketch-level guide, the keyframe is final quality). But the SCENE CONTENT, LAYOUT, CHARACTER PLACEMENT, and CHARACTER IDENTITY must match. If the keyframe shows a fundamentally different composition, framing, character arrangement, or character appearance than Panel 1 of the storyboard, this is a FAIL: "STORYBOARD MISMATCH: [describe the discrepancy]"."""
 
         prompt = f"""Analyze this generated keyframe for a film adaptation.
         
