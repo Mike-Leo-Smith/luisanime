@@ -143,7 +143,6 @@ def build_clothing_block(
         except FileNotFoundError:
             clothing_lines.append(f"{entity_id}: {pose}")
     block = "\n".join(clothing_lines) if clothing_lines else "See INITIAL POSES."
-    block += "\n\nVISUAL-FIRST RULE: Describe all character states through OBSERVABLE physical cues only — facial micro-expressions (furrowed brow, clenched jaw, pursed lips), body language (hunched shoulders, clenched fists, fidgeting hands), and gaze direction. NEVER use abstract emotional labels (sad, angry, nervous). If a character is experiencing an emotion, show it through concrete physical actions the camera can capture."
     return block
 
 
@@ -160,7 +159,6 @@ def build_appearance_block(
         except FileNotFoundError:
             appearance_lines.append(f"- {entity_id}: {pose}")
     block = "\n".join(appearance_lines) if appearance_lines else "See keyframe image."
-    block += "\n\nVISUAL-FIRST RULE: All character descriptions must use CONCRETE PHYSICAL descriptors only — facial micro-expressions (furrowed brow, clenched jaw, widened eyes, flared nostrils, pursed lips), body language (hunched shoulders, tapping fingers, shifting weight), and observable actions. NEVER use abstract emotional words (sad, angry, nervous, happy). The video model renders only what it can see."
     return block
 
 
@@ -176,8 +174,7 @@ def build_dialogue_block_keyframe(dialogue: List[Dict]) -> str:
     return f"""
 DIALOGUE IN THIS SHOT (use to inform character expressions and mouth positions):
 {chr(10).join(lines)}
-Characters who are speaking should have appropriate mouth positions and facial expressions matching their emotion.
-VISUAL-FIRST: Express the speaker's emotion through PHYSICAL facial cues (furrowed brow, clenched jaw, pursed lips, widened eyes, trembling chin) — NOT through abstract labels. The keyframe must show observable body language that communicates the emotional state."""
+Characters who are speaking should have appropriate mouth positions and facial expressions matching their dialogue."""
 
 
 def build_dialogue_block_video(dialogue: List[Dict]) -> str:
@@ -191,10 +188,9 @@ def build_dialogue_block_video(dialogue: List[Dict]) -> str:
         line = d.get("line", "")
         lines.append(f'- {speaker} ({emotion}): "{line}"')
     return f"""
-        DIALOGUE DURING THIS SHOT (audio will be generated — include spoken lines EXACTLY as written in quotation marks):
+        DIALOGUE DURING THIS SHOT (include spoken lines EXACTLY as written in quotation marks):
         {chr(10).join(lines)}
-        The video model generates audio. You MUST include each dialogue line in your output using the format: the character says "exact line here". Also describe matching lip movement, facial expressions (using PHYSICAL descriptors: furrowed brow, clenched jaw, widened eyes — NOT emotional labels), and body language reflecting the tone.
-        AI短剧 DIALOGUE RULE: Keep dialogue short, punchy, and impactful. Avoid long monologues — the fast-cut rhythm demands brief, powerful lines delivered with strong physical expressiveness."""
+        Include each dialogue line as: the character says "exact line here". Describe matching lip movement, facial expressions (physical descriptors), and body language."""
 
 
 def build_spatial_block(
@@ -220,17 +216,15 @@ def build_spatial_block(
         (MG) Midground Subject: {sc.get("midground_subject", "primary subject")}
         (BG) Background: {sc.get("background_element", "environment")}
         Depth of Field: {sc.get("depth_of_field", "cinematic")}
-        Maintain these spatial layers in your motion description — the foreground element should stay visible, the midground subject moves as described, and the background provides consistent context.
-        ATMOSPHERE: Describe the lighting direction, color temperature, shadow quality, and any atmospheric effects (dust, rain, fog, steam) visible in the scene. The video model renders exactly what you describe."""
+        Maintain these spatial layers throughout — FG visible, MG moves as described, BG provides consistent context."""
     else:
         return f"""
 SPATIAL LAYERING PROTOCOL — [空间关系与焦段] + [FG] + [MG] + [BG] + [光影与景深控制]:
 SHOT SCALE: {shot_scale} | CAMERA ANGLE: {camera_angle}
 FRAMING TYPE: {sc.get("framing_type", "standard")}
 COMPOSITION TECHNIQUE: {sc.get("composition_technique", "standard")}
-(FG) FOREGROUND: {sc.get("foreground_element", "none")} — render this layer with appropriate blur/bokeh as specified by depth of field.
-(MG) MIDGROUND SUBJECT: {sc.get("midground_subject", "primary subject in focus")} — this is the sharply focused primary subject.
+(FG) FOREGROUND: {sc.get("foreground_element", "none")} — render with appropriate blur/bokeh per depth of field.
+(MG) MIDGROUND SUBJECT: {sc.get("midground_subject", "primary subject in focus")} — sharply focused primary subject.
 (BG) BACKGROUND: {sc.get("background_element", "environmental context")} — render at appropriate focus distance.
 DEPTH OF FIELD: {sc.get("depth_of_field", "standard cinematic depth")}
-Compose the frame so these three layers are clearly distinguishable and create volumetric depth.
-ATMOSPHERE AND LIGHTING: Explicitly render the lighting direction, color temperature, shadow characteristics, and any atmospheric particles (dust motes, rain, steam, fog) described in the setting. These visual elements are essential for AI短剧 mood — do not omit them."""
+Compose so three layers create volumetric depth."""

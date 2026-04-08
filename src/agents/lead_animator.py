@@ -124,37 +124,24 @@ class LeadAnimatorAgent(BaseExecutor):
             spatial_ref = "Maintain the spatial layout visible in the starting keyframe. Object positions, furniture, and architectural features must not shift during the video."
             ref_image_rule = "9. Describe each character's full appearance and the environment in rich detail so the video model can maintain visual consistency from the reference images provided separately."
 
-        return f"""Combine the following cinematic instructions into a single PURELY PHYSICAL motion description in English for a video generation model (AI短剧 style — fast-paced, visually concrete, zero abstract emotions).
+        return f"""Combine the following cinematic instructions into a single PURELY PHYSICAL motion description in English for a video generation model. Apply ALL rules from your system prompt.
         
-        STRICT RULES:
-        1. Remove all character names, specific locations, brand names, and sensitive/abstract concepts.
-        2. Replace character names with DETAILED generic descriptors based on their FULL appearance — always include their clothing, hairstyle, and distinguishing features (e.g., "the young man in a dark navy double-breasted wool coat over a white collared shirt, with short black hair", "the slender woman in a crimson silk qipao with gold embroidery, hair pinned up with a jade hairpin").
-        3. For EACH character visible in the shot, the output MUST include:
-           a) Full clothing description (fabric, color, cut, layering, accessories)
-           b) Body position and staging (where they stand/sit relative to the environment and other characters, facing direction)
-           c) Specific physical action and gesture (what their hands, arms, head, torso are doing moment by moment)
-           d) Facial expression using PHYSICAL descriptors only (furrowed brow, pursed lips, widened eyes, clenched jaw, flared nostrils) — NEVER use emotional labels like "sad", "angry", "nervous"
-        {image_ref_rule}        5. The description should be DETAILED but CONCISE (250-350 words). Do NOT over-compress or omit character details, but avoid redundant adjectives and filler. Every character's clothing, position, and action must be explicitly described — the video model cannot infer what it is not told. The TOTAL prompt (including style prefix/suffix added later) must stay under 2500 characters.
-        6. Include light quality (direction, color temperature, shadow characteristics), camera movement, and environmental atmosphere. Specify the color tone/palette of the scene. Character appearance and action details still take PRIORITY — never sacrifice character description for brevity.
-        7. NEVER include any on-screen text, subtitles, captions, dialogue bubbles, narration overlays, or watermarks in the description. The output is a PURE VISUAL motion sequence with zero text elements.
-        8. If characters are speaking, you MUST include their dialogue in your output. Write it as: the character says "exact spoken line here" (in the original language). The video model generates audio from your text, so spoken lines in quotation marks are essential for correct speech synthesis. Also describe lip movement, facial expressions (using physical descriptors), and body gestures matching the dialogue.
-        {ref_image_rule}        10. AUDIO DIRECTION (CRITICAL): The video model generates audio. You MUST specify the sound design:
-            - ALLOWED sounds: Scene ambient noise (room tone, wind, rain, traffic, birds), object interaction sounds (footsteps, door creaking, cup clinking, typing, tools operating), character dialogue (spoken lines in quotation marks), narration voiceover (if applicable).
-            - STRICTLY FORBIDDEN: Background music, musical score, soundtrack, mood music, incidental music, sound effects that don't originate from visible objects in the scene (e.g., no "whoosh" transitions, no cinematic booms, no dramatic stingers).
-            - Describe the ambient soundscape briefly: e.g., "The quiet hum of fluorescent lights and distant traffic outside the window." This helps the model generate appropriate environmental audio without adding music.
-        11. CHARACTER COUNT (CRITICAL): This shot contains EXACTLY {entity_count} character(s). Do NOT introduce extra people, bystanders, or background figures. If the starting keyframe shows exactly {entity_count} figure(s), the video must maintain that exact count throughout — no one appears or vanishes unless the action explicitly describes an entrance or exit.
-        12. DIALOGUE TIMING (CRITICAL): Do NOT place any character dialogue or speech at the very BEGINNING (first 10% of clip duration) or very END (last 10% of clip duration) of the video clip. Dialogue at clip boundaries will be cut off when clips are concatenated. Place all dialogue in the middle 80% of the clip.
-        13. VISUAL-FIRST RULE (AI短剧 CORE PRINCIPLE): NEVER describe emotions abstractly. Every character state must be expressed through OBSERVABLE physical cues:
-            WRONG: "She looks sad" / "He is angry" / "The figure appears nervous"
-            RIGHT: "Her lower lip trembles, eyes glistening with moisture, shoulders hunched forward" / "His jaw clenches, nostrils flare, veins visible on his temple" / "She fidgets with her ring, avoids eye contact, swallows hard"
-        14. NO STATIC FRAMES: Every second must have visible motion. Even in dialogue-heavy moments, include micro-movements: chest rising with breath, fingers tapping, eyes shifting focus, hair disturbed by airflow. Static talking-head footage is the enemy of AI短剧 rhythm.
+        DISTILLATION RULES:
+        1. Replace character names with DETAILED generic descriptors including clothing, hairstyle, and distinguishing features (e.g., "the young man in a dark navy wool coat over a white collared shirt, short black hair").
+        2. Remove specific locations, brand names, and abstract concepts.
+        3. For EACH visible character, include: full clothing, body position/staging, specific physical actions, facial expression (physical descriptors only).
+        {image_ref_rule}        5. Target 250-350 words. Never omit character details. Total prompt (with style prefix/suffix) must stay under 2500 characters.
+        6. Include lighting (direction, color temperature, shadows), camera movement, color tone/palette. Character details still take PRIORITY.
+        7. NO on-screen text, subtitles, captions, dialogue bubbles, watermarks.
+        8. Include dialogue as: the character says "exact line" (original language). Describe matching lip movement and facial expressions.
+        {ref_image_rule}        10. AUDIO: Describe ambient soundscape. ALLOWED: room tone, object sounds, dialogue, narration. FORBIDDEN: music, soundtrack, cinematic SFX.
+        11. CHARACTER COUNT: EXACTLY {entity_count} character(s). No extras appear or vanish unless action explicitly describes entrance/exit.
+        12. DIALOGUE TIMING: No dialogue in first 10% or last 10% of clip — place all dialogue in the middle 80%.
         {transition_block}
         SPATIAL CONSISTENCY:
         - {spatial_ref}
-        - Character scale and body proportions must stay physically realistic relative to the environment throughout the motion.
-        - Spatial relationships between characters (distance, facing direction, relative height) must evolve naturally from the starting frame — no teleporting or sudden repositioning.
-        - If a character interacts with an object or another character, the contact point must be anatomically plausible and spatially consistent with the established layout.
-        - Gaze direction and body orientation must match who/what the character is addressing at each moment.
+        - Character scale and proportions stay realistic throughout. Spatial relationships evolve naturally — no teleporting.
+        - Interaction contact points must be anatomically plausible. Gaze/body orientation must match who/what is addressed.
         {ref_block}
         {spatial_block}
         CHARACTER APPEARANCES AND POSES:
