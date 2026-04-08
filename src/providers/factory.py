@@ -5,6 +5,7 @@ from .gemini import GeminiProvider
 from .minimax import MiniMaxProvider
 from .openai_compat import OpenAICompatibleProvider
 from .kling import KlingProvider
+from .veo import VeoProvider
 
 
 class ProviderFactory:
@@ -67,6 +68,11 @@ class ProviderFactory:
                 base_url=config.get("base_url", "https://api-beijing.klingai.com"),
                 model=config.get("model", "kling-v3-omni"),
                 mode=config.get("mode", "pro"),
+            )
+        elif provider_type == "veo":
+            return VeoProvider(
+                api_key=api_key,
+                model=config.get("model", "veo-3.1-generate-preview"),
             )
         else:
             raise ValueError(f"Unknown video provider: {provider_type}")

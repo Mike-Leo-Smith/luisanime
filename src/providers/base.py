@@ -146,3 +146,34 @@ class BaseVideoProvider(ABC):
     @abstractmethod
     def get_video_status(self, task_id: str) -> Dict[str, Any]:
         pass
+
+    @property
+    def embeds_images_in_prompt(self) -> bool:
+        """Whether this provider requires image reference tokens in the prompt text.
+
+        - Kling: True — images are referenced via <<<image_N>>> tokens in the prompt.
+        - Veo: False — images are passed as separate API parameters, not in the prompt.
+
+        Downstream agents use this to decide whether to inject image tokens into
+        the distillation prompt or describe references purely in text.
+        """
+        return False
+
+    def format_image_reference(self, index: int, label: str) -> str:
+        """Return the prompt-visible token/text for referencing an image at `index`.
+
+        Args:
+            index: 1-based image index in the provider's image list.
+            label: Human-readable description of what this image is.
+
+        Returns:
+            A string to embed in the prompt. For providers that embed images in
+            prompt (e.g. Kling), returns a token like "<<<image_1>>>".
+            For providers that don't (e.g. Veo), returns an empty string.
+        """
+        return ""
+
+    @property
+    def prompt_length_limit(self) -> int:
+        """Max prompt length in characters. 0 means no limit."""
+        return 0
