@@ -73,10 +73,7 @@ Novel Excerpt:
         if reference_paths:
             ref_instruction = " IMPORTANT: Match the character's overall appearance, body type, and facial features shown in the reference image(s). Adapt clothing and expression to this scene's context while maintaining the same person's identity."
 
-        prompt = f"{prefix} A high-quality concept art character/environment design sheet. Subject: {entity_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} White background, clear details, single focus."
-
-        if len(prompt) > 1400:
-            prompt = prompt[:1400]
+        prompt = f"{prefix} A character design reference sheet on a white background for: {entity_name}. Layout: LEFT HALF shows a detailed close-up portrait (face, expression, hair, accessories); RIGHT HALF shows a three-view turnaround (front, 3/4 side, back) of the full body at the same scale. Description: {description}. Style: {suffix}. Guidelines: {master_style[:300]}.{ref_instruction} CHARACTER AESTHETICS: natural, conventionally attractive appearance. Relaxed natural expression (gentle smile or calm neutral face). Comfortable organic posture. No intense stares, exaggerated expressions, theatrical poses, or stiff mannequin stance. The character should look like a real person, not an actor performing. White background, clean layout, no text labels."
 
         config = ImageGenerationConfig()
         if reference_paths:
@@ -128,20 +125,15 @@ Novel Excerpt:
 
         ref_instruction = ""
         if reference_paths:
-            ref_instruction = " IMPORTANT: Match the location's architectural style, color palette, and atmosphere shown in the reference panorama. Adapt lighting and weather to this scene's specific moment while maintaining the same place's identity."
+            ref_instruction = " IMPORTANT: Match the location's architectural style, color palette, and atmosphere shown in the reference image. Adapt lighting and weather to this scene's specific moment while maintaining the same place's identity."
 
-        prompt = f"{prefix} A high-quality cinematic 21:9 PANORAMA concept art of a location/environment. This is a wide panoramic view for spatial reference. Location: {location_name}. Description: {description}. Style: {suffix}. Consistent artistic look following these guidelines: {master_style[:300]}.{ref_instruction} Ultra-wide panoramic establishing shot, detailed architecture and atmosphere, no characters."
-
-        if len(prompt) > 1400:
-            prompt = prompt[:1400]
+        prompt = f"{prefix} A multi-view environment design sheet on a white background for: {location_name}. Layout: show the same location from 3-4 different viewing directions (e.g., front entrance, interior wide, side angle, rear/opposite wall) arranged in a grid. Description: {description}. Style: {suffix}. Guidelines: {master_style[:300]}.{ref_instruction} Capture key spatial features, architecture, lighting, and atmosphere from each direction. No characters, no text labels."
 
         config = ImageGenerationConfig()
         if reference_paths:
             config.reference_media = [
                 self.workspace.get_physical_path(p) for p in reference_paths
             ]
-        config.width = 2016
-        config.height = 960
 
         safe_name = location_name.replace("/", "_").replace("\\", "_")
         if scene_id:
@@ -170,6 +162,77 @@ Novel Excerpt:
             f"🎨 [Production Designer] Location design saved: {image_path} ({len(response.image_bytes)} bytes, {elapsed:.1f}s)"
         )
         return image_path
+
+    def generate_object_design(
+        self,
+        object_name: str,
+        description: str,
+        master_style: str,
+        scene_id: Optional[str] = None,
+        reference_paths: Optional[List[str]] = None,
+    ) -> str:
+        print(
+            f"🎨 [Production Designer] Creating OBJECT design for: {object_name} (scene={scene_id or 'global'})"
+        )
+        print(f"   Description: {description[:200]}...")
+        if reference_paths:
+            print(f"   Reference images: {reference_paths}")
+
+        _style_key, prefix, suffix = load_style_preset(self.project_config)
+
+        ref_instruction = ""
+        if reference_paths:
+            ref_instruction = " IMPORTANT: Match the object's shape, material, and details shown in the reference image(s). Adapt to this scene's context while maintaining the same object's identity."
+
+        prompt = f"{prefix} A detailed object/prop reference sheet on a white background for: {object_name}. Layout: show the object from 4-6 angles (front, back, side, top, detail close-up) arranged in a clean grid. Description: {description}. Style: {suffix}. Guidelines: {master_style[:300]}.{ref_instruction} White background, clean layout, no text labels, no human figures."
+
+        config = ImageGenerationConfig()
+        if reference_paths:
+            config.reference_media = [
+                self.workspace.get_physical_path(p) for p in reference_paths
+            ]
+
+        if scene_id:
+            image_path = f"03_lore_bible/designs/scenes/{scene_id}/{object_name}.png"
+        else:
+            image_path = f"03_lore_bible/designs/{object_name}.png"
+
+        self.log_prompt(
+            "ProductionDesigner",
+            f"OBJECT_{object_name}",
+            prompt,
+            custom_path=f"{image_path}.prompt.txt",
+        )
+
+        print(
+            f"🎨 [Production Designer] Object prompt ({len(prompt)} chars): {prompt[:300]}..."
+        )
+        t0 = time.time()
+        response = self.image_gen.generate_image(prompt=prompt, config=config)
+        elapsed = time.time() - t0
+
+        self.workspace.save_media(image_path, response.image_bytes)
+        print(
+            f"🎨 [Production Designer] Object design saved: {image_path} ({len(response.image_bytes)} bytes, {elapsed:.1f}s)"
+        )
+        return image_path
+
+    def classify_entity(self, entity_name: str, novel_context: str) -> str:
+        """Classify an entity as 'character' or 'object' using LLM."""
+        prompt = f"""Classify the entity '{entity_name}' from the novel as either a CHARACTER or an OBJECT/PROP.
+- CHARACTER: a person, animal, or sentient being that acts, speaks, or has emotions.
+- OBJECT: an inanimate item, prop, artifact, tool, or non-sentient thing (e.g., a watch, sword, letter, vehicle).
+
+Novel excerpt (first 5000 chars):
+{novel_context[:5000]}
+
+Reply with EXACTLY one word: CHARACTER or OBJECT"""
+
+        response = self.llm.generate_text(prompt)
+        result = response.text.strip().upper()
+        if "OBJECT" in result:
+            return "object"
+        return "character"
 
 
 def production_designer_node(state: AFCState) -> Dict:
@@ -208,22 +271,40 @@ def production_designer_node(state: AFCState) -> Dict:
         except Exception as e:
             print(f"🎨 [Production Designer] ⚠️  Could not read scene: {e}")
 
-    # 2. Generate master/global character designs for active entities
+    # 2. Generate master/global designs for active entities (character vs object)
+    entity_types: Dict[str, str] = {}
     if plan:
         for entity in plan.active_entities:
             global_path = f"03_lore_bible/designs/{entity}.png"
             if not ws.exists(global_path):
+                entity_type = agent.classify_entity(entity, novel_text)
+                entity_types[entity] = entity_type
                 print(
-                    f"🎨 [Production Designer] Generating MASTER design for '{entity}'..."
+                    f"🎨 [Production Designer] Entity '{entity}' classified as: {entity_type}"
                 )
-                extraction_prompt = f"""Extract a PURELY VISUAL, comprehensive physical description for the character/entity '{entity}' as described across the entire novel.
-                Include: facial features, typical clothing style, body type, age, hair, skin tone, and any distinguishing physical traits.
-                This is a MASTER reference — describe their DEFAULT canonical appearance, not scene-specific variations.
-                STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
-                
-                Novel Text:
-                {novel_text[:50000]}
-                """
+                print(
+                    f"🎨 [Production Designer] Generating MASTER design for '{entity}' ({entity_type})..."
+                )
+
+                if entity_type == "character":
+                    extraction_prompt = f"""Extract a PURELY VISUAL, comprehensive physical description for the character '{entity}' as described across the entire novel.
+                    Include: facial features, typical clothing style, body type, age, hair, skin tone, and any distinguishing physical traits.
+                    This is a MASTER reference — describe their DEFAULT canonical appearance, not scene-specific variations.
+                    STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                    
+                    Novel Text:
+                    {novel_text[:50000]}
+                    """
+                else:
+                    extraction_prompt = f"""Extract a PURELY VISUAL, comprehensive physical description for the object/prop '{entity}' as described across the entire novel.
+                    Include: shape, size, material, color, texture, markings, and any distinguishing physical details.
+                    This is a MASTER reference — describe the object's DEFAULT canonical appearance.
+                    STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                    
+                    Novel Text:
+                    {novel_text[:50000]}
+                    """
+
                 t0 = time.time()
                 desc_resp = agent.llm.generate_text(
                     extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
@@ -236,7 +317,12 @@ def production_designer_node(state: AFCState) -> Dict:
                     f"🎨 [Production Designer] Master description for '{entity}' extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
                 )
                 try:
-                    agent.generate_design(entity, clean_desc[:500], master_style)
+                    if entity_type == "character":
+                        agent.generate_design(entity, clean_desc[:500], master_style)
+                    else:
+                        agent.generate_object_design(
+                            entity, clean_desc[:500], master_style
+                        )
                 except Exception as e:
                     print(
                         f"🎨 [Production Designer] ⚠️  Failed to generate master design for '{entity}': {e}"
@@ -246,7 +332,7 @@ def production_designer_node(state: AFCState) -> Dict:
                     f"🎨 [Production Designer] Master design already exists for '{entity}' — skipping"
                 )
 
-    # 3. Generate master/global location panorama
+    # 3. Generate master/global location environment design
     if scene_data:
         location = scene_data.get("physical_location", "")
         if location:
@@ -254,7 +340,7 @@ def production_designer_node(state: AFCState) -> Dict:
             global_loc_path = f"03_lore_bible/designs/locations/{safe_name}.png"
             if not ws.exists(global_loc_path):
                 print(
-                    f"🎨 [Production Designer] Generating MASTER panorama for location '{location}'..."
+                    f"🎨 [Production Designer] Generating MASTER environment design for location '{location}'..."
                 )
                 extraction_prompt = f"""Extract a PURELY VISUAL description of the location '{location}' as described across the entire novel.
                 Include: architectural style, interior/exterior details, typical lighting, color palette, atmosphere, and distinctive features.
@@ -283,10 +369,10 @@ def production_designer_node(state: AFCState) -> Dict:
                     )
             else:
                 print(
-                    f"🎨 [Production Designer] Master panorama already exists for '{location}' — skipping"
+                    f"🎨 [Production Designer] Master environment design already exists for '{location}' — skipping"
                 )
 
-    # 4. Generate scene-specific location design (referencing master panorama)
+    # 4. Generate scene-specific location design (referencing master design)
     if scene_data and scene_id:
         location = scene_data.get("physical_location", "")
         if location:
@@ -336,7 +422,7 @@ def production_designer_node(state: AFCState) -> Dict:
                     f"🎨 [Production Designer] Scene location design already exists for '{location}' (scene={scene_id}) — skipping"
                 )
 
-    # 5. Generate scene-specific entity designs (referencing master character sheets)
+    # 5. Generate scene-specific entity designs (referencing master sheets)
     if plan and scene_id:
         scene_context_str = ""
         if scene_data:
@@ -348,17 +434,34 @@ def production_designer_node(state: AFCState) -> Dict:
                 master_ref = f"03_lore_bible/designs/{entity}.png"
                 ref_paths = [master_ref] if ws.exists(master_ref) else None
 
+                entity_type = entity_types.get(entity)
+                if entity_type is None:
+                    entity_type = agent.classify_entity(entity, novel_text)
+                    entity_types[entity] = entity_type
+
                 print(
-                    f"🎨 [Production Designer] Generating scene-specific design for '{entity}' (scene={scene_id})..."
+                    f"🎨 [Production Designer] Generating scene-specific design for '{entity}' ({entity_type}, scene={scene_id})..."
                 )
-                extraction_prompt = f"""Extract a PURELY VISUAL physical description for the entity '{entity}' as they appear in this specific scene.
-                Include: facial features, clothing appropriate to the scene context, body type, age, and current emotional/physical state.
-                Scene context: {scene_context_str}
-                STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler, no 'As an art director...', no introductory or concluding remarks.
-                
-                Novel Text:
-                {novel_text[:50000]}
-                """
+
+                if entity_type == "character":
+                    extraction_prompt = f"""Extract a PURELY VISUAL physical description for the character '{entity}' as they appear in this specific scene.
+                    Include: facial features, clothing appropriate to the scene context, body type, age, and current emotional/physical state.
+                    Scene context: {scene_context_str}
+                    STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler, no 'As an art director...', no introductory or concluding remarks.
+                    
+                    Novel Text:
+                    {novel_text[:50000]}
+                    """
+                else:
+                    extraction_prompt = f"""Extract a PURELY VISUAL physical description for the object/prop '{entity}' as it appears in this specific scene.
+                    Include: shape, size, material, color, texture, condition, and any scene-specific details (e.g., lighting, wear).
+                    Scene context: {scene_context_str}
+                    STRICT RULE: Output ONLY the visual description text. No markdown headers, no conversational filler.
+                    
+                    Novel Text:
+                    {novel_text[:50000]}
+                    """
+
                 t0 = time.time()
                 desc_resp = agent.llm.generate_text(
                     extraction_prompt, system_prompt=PRODUCTION_DESIGNER_PROMPT
@@ -373,13 +476,22 @@ def production_designer_node(state: AFCState) -> Dict:
                     f"🎨 [Production Designer] Entity '{entity}' scene description extracted in {elapsed:.1f}s: {clean_desc[:200]}..."
                 )
                 try:
-                    agent.generate_design(
-                        entity,
-                        clean_desc[:500],
-                        master_style,
-                        scene_id=scene_id,
-                        reference_paths=ref_paths,
-                    )
+                    if entity_type == "character":
+                        agent.generate_design(
+                            entity,
+                            clean_desc[:500],
+                            master_style,
+                            scene_id=scene_id,
+                            reference_paths=ref_paths,
+                        )
+                    else:
+                        agent.generate_object_design(
+                            entity,
+                            clean_desc[:500],
+                            master_style,
+                            scene_id=scene_id,
+                            reference_paths=ref_paths,
+                        )
                 except Exception as e:
                     print(
                         f"🎨 [Production Designer] ⚠️  Failed to generate design for '{entity}': {e}"
