@@ -111,7 +111,6 @@ class CinematographerAgent(BaseExecutor):
         self,
         plan: ShotExecutionPlan,
         lore_context: str,
-        designs: List[str],
         feedback: Optional[str] = None,
         retry_count: int = 0,
         storyboard_path: Optional[str] = None,
@@ -121,44 +120,27 @@ class CinematographerAgent(BaseExecutor):
         print(
             f"📸 [Cinematographer] Generating STRICT STARTING FRAME for: {shot_id} (v{version})"
         )
-        print(f"   Designs: {designs}")
+        print(f"   Storyboard: {storyboard_path}")
         print(f"   Feedback: {feedback[:200] if feedback else None}")
 
         _style_key, prefix, _suffix = load_style_preset(self.project_config)
 
-        # build reference image manifest (storyboard first, then designs)
+        # build reference image manifest — storyboard ONLY (no design refs)
         ref_manifest_lines = []
-        extra_physical_refs = []
+        storyboard_physical = []
         img_idx = 1
 
         if storyboard_path and self.workspace.exists(storyboard_path):
             ref_manifest_lines.append(
-                f"Image {img_idx}: STORYBOARD for this shot — a 3-4 panel sequence "
-                f"showing the planned action progression. Your keyframe MUST match "
-                f"Panel 1 of this storyboard: same composition, character positions, "
-                f"environment, and framing. Characters in the keyframe MUST closely "
-                f"match how they appear in the storyboard — same face, hairstyle, "
-                f"clothing, and overall look. This is the visual plan you are "
-                f"realizing as a high-quality keyframe."
+                f"Image {img_idx}: STORYBOARD for this shot — a 3-4 panel sequence. "
+                f"Convert PANEL 1 (the leftmost panel) into a full-resolution, "
+                f"production-quality image. Reproduce the EXACT composition, "
+                f"character positions, character appearance (face, hairstyle, "
+                f"clothing), environment, framing, and lighting from Panel 1."
             )
-            extra_physical_refs.append(
+            storyboard_physical.append(
                 self.workspace.get_physical_path(storyboard_path)
             )
-            img_idx += 1
-
-        for d in designs:
-            if "/locations/" in d:
-                label = (
-                    f"Image {img_idx}: LOCATION/ENVIRONMENT DESIGN — reference "
-                    f"for the setting's architecture, layout, and spatial arrangement."
-                )
-            else:
-                entity_name = d.rsplit("/", 1)[-1].replace(".png", "")
-                label = (
-                    f"Image {img_idx}: CHARACTER DESIGN for '{entity_name}' — "
-                    f"reference for this character's appearance, clothing, and body type."
-                )
-            ref_manifest_lines.append(label)
             img_idx += 1
 
         ref_manifest = ""
@@ -177,12 +159,12 @@ class CinematographerAgent(BaseExecutor):
 
         full_prompt = f"""{prefix}
 RULES:
-- This image is the STARTING FRAME (Frame 0) of the shot — a single frozen instant.
+- This image is the STARTING FRAME (Frame 0) of the shot — a single frozen instant. Convert Panel 1 of the attached storyboard into a full-resolution, production-quality image.
 - ONE cinematic shot. No multi-panels, no montages.
 - No on-screen text, subtitles, captions, dialogue bubbles, or watermarks.
 - NO borders, padding, margins, letterboxing, or white edges. The image content MUST fill the entire canvas edge-to-edge.
 - EXACTLY {entity_count} character(s): [{entity_list}]. No extra figures, no background people, no crowd members, no reflections of people not listed.
-- CHARACTER IDENTITY (CRITICAL): Each character MUST closely match how they appear in the STORYBOARD (if attached) and the CHARACTER DESIGN reference images. Reproduce the SAME face (facial features, face shape, skin tone), SAME hairstyle (color, length, style), and SAME clothing (outfit, colors, accessories). Characters must be visually recognizable as the SAME person across storyboard, design sheets, and this keyframe.
+- CHARACTER IDENTITY (CRITICAL): Each character MUST closely match how they appear in the STORYBOARD Panel 1. Reproduce the SAME face (facial features, face shape, skin tone), SAME hairstyle (color, length, style), and SAME clothing (outfit, colors, accessories).
 - CHARACTER AESTHETICS: All characters must look NATURAL and appealing. Relaxed expressions (gentle smile, calm gaze, soft brow). Comfortable organic postures. No intense stares, exaggerated wide eyes, theatrical poses, stiff mannequin stances, or forced expressions. Characters should look like real people captured candidly.
 
 {ref_manifest}
@@ -223,10 +205,10 @@ You MUST:
             f"({len(full_prompt)} chars):\n{full_prompt[:500]}..."
         )
 
-        all_refs = designs + failed_keyframe_ref
+        all_refs = failed_keyframe_ref
         physical_refs = [
             self.workspace.get_physical_path(p) for p in all_refs
-        ] + extra_physical_refs
+        ] + storyboard_physical
         print(f"📸 [Cinematographer] Reference images: {len(physical_refs)} files")
 
         # resolution
@@ -554,7 +536,6 @@ def cinematographer_node(state: AFCState) -> Dict:
     keyframe_path = agent.generate_image_constrained(
         plan,
         lore,
-        designs,
         feedback=feedback,
         retry_count=retry_count,
         storyboard_path=storyboard_path or None,
