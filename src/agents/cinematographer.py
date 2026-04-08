@@ -436,6 +436,10 @@ def cinematographer_node(state: AFCState) -> Dict:
         f"{str(state.get('continuity_feedback'))[:100] if state.get('continuity_feedback') else None}"
     )
     print(f"   scene_dailies_paths: {state.get('scene_dailies_paths', [])}")
+    print(
+        f"   storyboard_feedback: "
+        f"{str(state.get('storyboard_feedback'))[:100] if state.get('storyboard_feedback') else None}"
+    )
     print(f"{'=' * 60}")
 
     from src.pipeline.workspace import AgenticWorkspace
@@ -508,6 +512,45 @@ def cinematographer_node(state: AFCState) -> Dict:
                 f"falling back to standard generation"
             )
 
+    # ── storyboard regeneration (rejected by storyboard QA) ─────────
+    storyboard_feedback = state.get("storyboard_feedback")
+    if storyboard_feedback:
+        print(
+            f"📸 [Cinematographer] STORYBOARD REJECTED by QA — regenerating storyboard only"
+        )
+        print(f"   QA feedback: {storyboard_feedback[:200]}")
+        existing_sb = f"05_dailies/{plan.shot_id}/storyboard.png"
+        if ws.exists(existing_sb):
+            physical_sb = ws.get_physical_path(existing_sb)
+            if os.path.exists(physical_sb):
+                os.remove(physical_sb)
+                print(
+                    f"📸 [Cinematographer] Deleted rejected storyboard: {existing_sb}"
+                )
+
+        old_keyframe = state.get("current_keyframe_path")
+        if old_keyframe and ws.exists(old_keyframe):
+            physical_kf = ws.get_physical_path(old_keyframe)
+            if os.path.exists(physical_kf):
+                os.remove(physical_kf)
+                print(
+                    f"📸 [Cinematographer] Deleted keyframe from rejected storyboard: {old_keyframe}"
+                )
+
+        prev_video_storyboard = _extract_prev_storyboard(agent, ws, plan, dailies)
+        storyboard_path = agent.generate_storyboard(
+            plan, designs, prev_video_storyboard=prev_video_storyboard
+        )
+        print(
+            f"📸 [Cinematographer] === NODE EXIT === Storyboard regenerated: {storyboard_path}"
+        )
+        return {
+            "current_storyboard_path": storyboard_path,
+            "current_keyframe_path": None,
+            "keyframe_retry_count": 0,
+            "keyframe_is_reused_frame": False,
+        }
+
     # ── standard shot: storyboard → keyframe ───────────────────────
     retry_count = state.get("keyframe_retry_count", 0)
 
@@ -516,8 +559,6 @@ def cinematographer_node(state: AFCState) -> Dict:
     )
     feedback = state.get("continuity_feedback")
 
-    # Ensure storyboard always exists before keyframe generation.
-    # On retry, reuse the existing storyboard (don't regenerate).
     existing_storyboard = f"05_dailies/{plan.shot_id}/storyboard.png"
     if ws.exists(existing_storyboard):
         storyboard_path = existing_storyboard

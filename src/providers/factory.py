@@ -61,7 +61,13 @@ class ProviderFactory:
                 video_model=config.get("model", "MiniMax-Hailuo-02"),
             )
         elif provider_type == "kling":
-            secret_key = cls._resolve_api_key(config.get("secret_key", ""))
+            raw_secret = config.get("secret_key")
+            if not raw_secret:
+                raise ValueError(
+                    "Kling provider requires 'secret_key' in model config "
+                    "(e.g. secret_key: 'ENV:KLING_SECRET_KEY')"
+                )
+            secret_key = cls._resolve_api_key(raw_secret)
             return KlingProvider(
                 access_key=api_key,
                 secret_key=secret_key,

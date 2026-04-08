@@ -242,12 +242,46 @@ def production_designer_node(state: AFCState) -> Dict:
     print(f"   active_shot_plan: {plan.shot_id if plan else None}")
     if plan:
         print(f"   active_entities: {plan.active_entities}")
+    design_feedback = state.get("design_feedback")
+    print(f"   design_feedback: {design_feedback[:100] if design_feedback else None}")
     print(f"{'=' * 60}")
 
     from src.pipeline.workspace import AgenticWorkspace
 
     ws = AgenticWorkspace(state["workspace_root"])
     agent = ProductionDesignerAgent.from_config(ws, state["project_config"])
+
+    scene_id_for_cleanup = extract_scene_id(plan.shot_id) if plan else None
+    if design_feedback and plan and scene_id_for_cleanup:
+        print(
+            f"🎨 [Production Designer] Design QA rejected — deleting scene-specific designs for regeneration"
+        )
+        import os
+
+        for entity in plan.active_entities:
+            scene_design = (
+                f"03_lore_bible/designs/scenes/{scene_id_for_cleanup}/{entity}.png"
+            )
+            if ws.exists(scene_design):
+                physical = ws.get_physical_path(scene_design)
+                if os.path.exists(physical):
+                    os.remove(physical)
+                    print(f"🎨 [Production Designer]   Deleted: {scene_design}")
+        scene_path_tmp = state.get("current_scene_path")
+        if scene_path_tmp:
+            try:
+                sd = ws.read_json(scene_path_tmp)
+                loc = sd.get("physical_location", "")
+                if loc:
+                    safe = loc.replace("/", "_").replace("\\", "_")
+                    loc_design = f"03_lore_bible/designs/scenes/{scene_id_for_cleanup}/locations/{safe}.png"
+                    if ws.exists(loc_design):
+                        physical = ws.get_physical_path(loc_design)
+                        if os.path.exists(physical):
+                            os.remove(physical)
+                            print(f"🎨 [Production Designer]   Deleted: {loc_design}")
+            except Exception:
+                pass
 
     # 1. Ensure Master Style exists
     try:

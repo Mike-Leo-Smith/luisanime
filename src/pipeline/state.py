@@ -76,6 +76,14 @@ class AFCState(TypedDict):
     escalation_required: Annotated[bool, _replace]
     keyframe_is_reused_frame: Annotated[bool, _replace]
 
+    # Design QA (production design validation)
+    design_feedback: Annotated[Optional[str], _replace]
+    design_retry_count: Annotated[int, _replace]
+
+    # Storyboard QA
+    storyboard_feedback: Annotated[Optional[str], _replace]
+    storyboard_retry_count: Annotated[int, _replace]
+
 
 # ── Checkpoint save/load ──────────────────────────────────────────
 

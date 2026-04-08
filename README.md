@@ -5,13 +5,14 @@ The **Agentic Filming Pipeline (AFP)** is an end-to-end automated system that tr
 By modeling the process after modern compiler infrastructures and physically-based rendering pipelines, AFP abstracts the unpredictable nature of generative AI behind strict state machines, Intermediate Representations (IR), and automated visual linters. The system uses a **LangGraph-based workflow** where specialized AI agents collaborate as a film production crew.
 
 ## Key Features
-- **Autonomous Film Crew Architecture**: 9 specialized agents collaborate via LangGraph state machine
+- **Autonomous Film Crew Architecture**: 11 specialized agents collaborate via LangGraph state machine
 - **Shot Continuation Detection**: Director pre-marks continuation shots; pipeline reuses the last video frame as the starting keyframe for seamless transitions
 - **Per-Agent Configuration**: Each AI agent has independent provider, model, and API key settings
 - **Multi-Provider Support**: Unified interface for Gemini (LLM + Image), Kling (Video), and MiniMax (Video)
 - **Scene-Based Production**: Novels are broken into scenes, then shots, with full continuity management
-- **Quality Assurance Loops**: VLM-based keyframe inspection with retry logic, best-of-N fallback, and circuit breakers
+- **Quality Assurance Loops**: VLM-based QA at three stages — design validation, storyboard inspection, and keyframe review — with retry logic, best-of-N fallback, and circuit breakers
 - **No-Text Enforcement**: Style presets enforce zero on-screen text, subtitles, or dialogue bubbles in all generated media
+- **Storyboard-First Workflow**: Storyboard panels are generated before keyframes; keyframe converts Panel 1 into a full-resolution image
 - **Location & Character Design**: Production Designer generates reference images for locations and characters to maintain visual consistency
 - **Budget Management**: Built-in cost tracking with automatic production halt on budget exceedance
 
@@ -99,10 +100,12 @@ The pipeline automatically executes the full workflow:
 3. **Director** → Breaks scenes into shots with continuity and continuation marking
 4. **Script Coordinator** → Manages shot queue, tracks character state
 5. **Production Designer** → Generates master style, character designs, and location designs
-6. **Cinematographer** → Generates starting-frame keyframes (or extracts last frame for continuation shots)
-7. **Continuity Supervisor** → VLM-based QA on keyframes (auto-passes continuation keyframes)
-8. **Lead Animator** → Generates video via Kling API (continuation mode merges action descriptions)
-9. **Editor** → Assembles per-scene preview videos and final output
+6. **Design QA** → VLM-based validation of character/location/object designs (up to 3 retries)
+7. **Cinematographer** → Generates storyboard panels, then converts Panel 1 into a keyframe
+8. **Storyboard QA** → VLM-based storyboard inspection against design references (up to 3 retries)
+9. **Continuity Supervisor** → VLM-based QA on keyframes (auto-passes continuation keyframes)
+10. **Lead Animator** → Generates video via Kling API (continuation mode merges action descriptions)
+11. **Editor** → Assembles per-scene preview videos and final output
 
 ## Architecture Overview
 
@@ -115,10 +118,16 @@ The pipeline automatically executes the full workflow:
 | **Director** | Creative | Gemini 2.5 Flash | Generates shot plans with continuity and `is_continuation` marking |
 | **Script Coordinator** | Support | Gemini 2.5 Flash | Manages shot queue, tracks per-character state mutations |
 | **Production Designer** | Creative | Gemini 2.5 Flash + Gemini Image | Generates master style, character design sheets, location reference images |
-| **Cinematographer** | Creative | Gemini 2.5 Flash + Gemini Image | Generates starting-frame keyframes with design/location references |
+| **Design QA** | QA | Gemini 3.1 Pro | VLM-based validation of character/location/object designs against specs |
+| **Cinematographer** | Creative | Gemini 2.5 Flash + Gemini Image | Generates storyboard panels, then converts Panel 1 into a full-resolution keyframe |
+| **Storyboard QA** | QA | Gemini 3.1 Pro | VLM-based storyboard inspection — character identity, panel count, staging |
 | **Continuity Supervisor** | QA | Gemini 3.1 Pro | VLM-based keyframe QA with best-of-N fallback |
 | **Lead Animator** | Creative | Gemini 2.5 Flash + Kling | Generates video from approved keyframes via Kling v3-omni |
 | **Editor** | Support | FFmpeg | Assembles per-scene master videos with scale/pad normalization |
+
+### Storyboard-First Pipeline
+
+The Cinematographer generates a multi-panel storyboard first using design references and shot descriptions, then converts Panel 1 into a full-resolution keyframe. This ensures character identity fidelity — design refs inform the storyboard, and the storyboard alone informs the keyframe.
 
 ### Shot Continuation
 
@@ -139,10 +148,19 @@ Supported providers:
 ```
 START → Screenwriter → Showrunner → Director → Script Coordinator
                                                        ↓
-Editor ← Continuity Supervisor ← Lead Animator ← Cinematographer ← Production Designer
-  ↑              ↓ (fail)                                  ↑
-  │        Cinematographer (retry, up to 3×)               │
-  └────────────── Script Coordinator (next shot) ──────────┘
+                                              Production Designer
+                                                       ↓
+                                                  Design QA ──→ (fail) → Production Designer
+                                                       ↓ (pass)
+                                                 Cinematographer
+                                                       ↓
+                                                Storyboard QA ──→ (fail) → Cinematographer
+                                                       ↓ (pass)
+                                            Continuity Supervisor
+                                           ↓ (pass)        ↓ (fail)
+                                      Lead Animator    Cinematographer (retry keyframe, up to 3×)
+                                           ↓
+                                         Editor → Showrunner → ... → END
 ```
 
 ## Configuration Reference
