@@ -292,51 +292,38 @@ You MUST NOT directly copy or reproduce the composition, camera angle, or framin
         )
 
         full_prompt = f"""{prefix} 
-STRICT RULE: This image MUST be the absolute STARTING FRAME (First Frame) of the shot.
-STRICT RULE: Generate ONE single focused cinematic shot. NO multi-panels, NO montages.
-STRICT RULE: Do NOT render any on-screen text, subtitles, captions, dialogue bubbles, manga speech balloons, narration text, watermarks, or any form of written words in the image. The output must be a PURE VISUAL frame with zero text elements.
-STRICT RULE: This shot contains EXACTLY {entity_count} character(s): [{entity_list}]. Do NOT add any extra people, bystanders, crowd members, or background figures unless explicitly listed. Rendering more than {entity_count} human figure(s) is a critical error.
+STRICT RULES:
+- This image MUST be the absolute STARTING FRAME (Frame 0) of the shot.
+- Generate ONE single focused cinematic shot. NO multi-panels, NO montages.
+- NO on-screen text, subtitles, captions, dialogue bubbles, watermarks, or any written words.
+- EXACTLY {entity_count} character(s): [{entity_list}]. No extra people or background figures.
 
 {ref_manifest}
 
 {continuity_note}
 {spatial_block}
 
-SPATIAL CONSISTENCY (CRITICAL — refer to the attached reference frames):
-Maintain strict spatial coherence with previous shots in the same location. Specifically:
-- Room layout, furniture placement, and object positions must stay consistent across different camera angles.
-- Door swing direction (left-hinged vs right-hinged), window positions, and architectural features must not change.
-- Relative positions of props (cups, books, lamps, etc.) on surfaces must remain where they were placed.
-- If a character moved an object in a previous shot, it must remain in its new position.
-- Lighting direction (e.g. window on the left casting light rightward) must be consistent with the established environment.
-Use the provided reference images as ground truth for the spatial layout of this environment.
+SPATIAL CONSISTENCY (refer to attached reference frames):
+- Room layout, furniture, object positions must stay consistent across camera angles.
+- Architectural features (door swing, window positions) must not change.
+- Props remain where placed; moved objects stay in new positions.
+- Lighting direction must match established environment.
 
-SPATIAL PROPORTIONS AND CHARACTER RELATIONSHIPS (CRITICAL):
-- Object and character scale must be physically realistic relative to the environment (e.g., a door is ~2m tall, a chair reaches waist height, a person's head is roughly 1/7 of their body height).
-- Character height and body proportions must remain consistent with their established design across all shots.
-- Spatial relationships between characters must reflect their dramatic relationship: distance, height difference, facing direction, and body orientation all convey intent.
-- Interaction state must be physically coherent: if one character is handing an object to another, both arms, the object, and the receiving hand must align in 3D space.
-- Gaze direction, head tilt, and body lean must match who the character is addressing or what they are observing.
-- If characters are in physical contact (touching, holding, pushing), the contact point must be anatomically plausible and consistent from both characters' perspectives.
+SPATIAL PROPORTIONS AND CHARACTER RELATIONSHIPS:
+- Object/character scale must be physically realistic relative to environment.
+- Character height and proportions must match their established design.
+- Spatial relationships reflect dramatic intent: distance, height, facing direction, body orientation.
+- Interaction points (handing objects, physical contact) must be anatomically plausible from both perspectives.
+- Gaze direction, head tilt, body lean must match who/what the character addresses.
 
-CHARACTER POSITION CONTINUITY (CRITICAL for continuous scenes):
-- In a continuous scene, characters do NOT teleport. If a character was on the left side of frame in the previous shot, they must still be on the left side (from the same spatial perspective) unless the shot plan explicitly describes them moving.
-- Avoid drastic changes in character relative positions between consecutive shots. If two characters were facing each other across a table, they remain in those positions.
-- When changing camera angle between shots, mentally rotate the spatial layout to ensure character left-right and near-far relationships are geometrically consistent from the new viewpoint.
-- Refer to the PREVIOUS SHOT reference frames to verify character positions before composing this frame.
+CHARACTER POSITION CONTINUITY (continuous scenes):
+- Characters do NOT teleport between shots. Left-side stays left-side unless explicitly moving.
+- When changing camera angle, rotate spatial layout mentally to maintain geometric consistency.
+- Check PREVIOUS SHOT reference frames to verify positions before composing.
 
-CHARACTER STATE CONTINUITY (CRITICAL — check previous shot end frame):
-- Character posture and action state MUST follow logically from the previous shot. If a character stood up in the previous shot, they MUST be standing in this shot — NOT sitting or lying down. If a character picked up an object, they must still be holding it. If a character walked to the door, they must be near the door.
-- Before composing, check the PREVIOUS SHOT END FRAME (95%) for each character's final posture (standing/sitting/lying/walking/holding), position, and facing direction. Your starting frame must be a plausible next moment in time.
-- State transitions that contradict the previous shot (e.g., standing→sitting without a sit-down action described, holding an object→empty hands) are HARD ERRORS that will cause the keyframe to be rejected.
-
---- ATMOSPHERE, LIGHTING, AND COLOR TONE (AI短剧 CRITICAL) ---
-
-LIGHTING AND ATMOSPHERE PROTOCOL — The AI video model renders ONLY what you describe. You MUST explicitly specify:
-- LIGHTING: Describe the primary light source direction, quality (hard/soft), color temperature (warm/cool/neutral), and shadow characteristics. Example: "Warm golden-hour light streaming from the left window, casting long soft shadows across the desk. Key light on the subject's face from 45 degrees camera-left."
-- COLOR TONE: The dominant color palette that sets the emotional register. Example: "Cold blue-gray corporate palette with desaturated walls and cool fluorescent highlights" or "Warm amber-and-brown intimate domestic tones."
-- ATMOSPHERIC EFFECTS: Any visible environmental elements — dust motes in light beams, rain on windows, steam, breath in cold air, haze. Only include physically motivated effects.
-These specifications are NOT optional — they have EQUAL PRIORITY with character positioning and spatial composition. A keyframe without explicit lighting/atmosphere direction will produce flat, lifeless video output.
+CHARACTER STATE CONTINUITY (check previous shot end frame):
+- Posture/action state must follow logically from previous shot (stood up → must be standing, picked up object → must be holding it).
+- State transitions contradicting the previous shot are HARD ERRORS causing rejection.
 
 STARTING COMPOSITION (Frame 0):
 ACTION START: {plan.action_description}
@@ -353,7 +340,7 @@ LORE CONTEXT: {lore_context}
 VISUAL STYLE REFERENCE:
 {master_style}
 
-TECHNICAL: Generate a 21:9 ultra-wide panoramic keyframe. This wide aspect ratio helps the AI video model understand the full spatial context of the scene. Photorealistic, masterpiece quality. {suffix}"""
+TECHNICAL: Generate a 21:9 ultra-wide panoramic keyframe. Photorealistic, masterpiece quality. {suffix}"""
 
         failed_keyframe_ref = []
         if feedback and retry_count > 0:
