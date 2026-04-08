@@ -113,15 +113,25 @@ def fetch_all_design_references(
     log_prefix: str = "",
     return_physical: bool = False,
 ) -> List[str]:
-    """Fetches both entity and location design references.
+    """Fetches entity, scene-level entity, and location design references."""
+    all_entities = list(entities)
+    if scene_json_path:
+        try:
+            scene_data = workspace.read_json(scene_json_path)
+            for e in scene_data.get("active_entities", []):
+                if e not in all_entities:
+                    all_entities.append(e)
+        except Exception:
+            pass
 
-    When return_physical=True, returns physical filesystem paths.
-    Otherwise returns virtual workspace paths.
-    """
-    designs = fetch_design_references(workspace, entities, scene_id=scene_id)
+    designs = fetch_design_references(workspace, all_entities, scene_id=scene_id)
     if scene_json_path:
         designs += fetch_location_references(
             workspace, scene_json_path, scene_id=scene_id, log_prefix=log_prefix
+        )
+    if log_prefix and len(all_entities) > len(entities):
+        print(
+            f"{log_prefix} Fetched designs for {len(all_entities)} entities (shot: {len(entities)}, scene: {len(all_entities) - len(entities)} extra)"
         )
     if return_physical:
         return [workspace.get_physical_path(p) for p in designs]
