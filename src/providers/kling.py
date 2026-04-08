@@ -50,6 +50,17 @@ class KlingProvider(BaseVideoProvider):
     STATUS_SUCCEED = "succeed"
     STATUS_FAILED = "failed"
 
+    @property
+    def embeds_images_in_prompt(self) -> bool:
+        return True
+
+    def format_image_reference(self, index: int, label: str) -> str:
+        return f"<<<image_{index}>>>"
+
+    @property
+    def prompt_length_limit(self) -> int:
+        return 2500
+
     def __init__(
         self,
         access_key: str,

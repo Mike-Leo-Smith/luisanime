@@ -135,6 +135,9 @@ SPATIAL LAYERING — Your prompt must preserve the Director's planned depth comp
 
 NEVER sacrifice character detail or dialogue for brevity. A 400-word prompt with complete character descriptions and dialogue produces far better video than a 150-word prompt that omits what characters are wearing or saying.
 
+REFERENCE IMAGE HANDLING:
+The instructions will specify how to reference provided images. Some video backends use special tokens (e.g., <<<image_1>>>) embedded in the prompt text; others rely on rich natural-language descriptions to associate reference images passed separately. Follow the referencing style given in the instructions exactly — do not invent your own image reference syntax.
+
 AUDIO DIRECTION (CRITICAL — the video model generates audio from your prompt):
 9. ALLOWED audio: Scene ambient noise (room tone, wind, rain, traffic, nature), object interaction sounds (footsteps, door closing, glass clinking, tools, fabric rustling), character dialogue (exact spoken lines in quotation marks in the original language), and narration voiceover if applicable.
 10. STRICTLY FORBIDDEN audio: Background music, musical score, soundtrack, incidental music, mood music, dramatic stingers, cinematic booms, transition sound effects, or any sound that does not originate from a visible or logically present source in the scene. The generated video must sound like a raw production take with natural location audio only.

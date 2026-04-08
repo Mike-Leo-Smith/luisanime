@@ -44,6 +44,11 @@ models:
     api_key: "ENV:KLING_ACCESS_KEY"
     secret_key: "ENV:KLING_SECRET_KEY"
 
+  veo-video:
+    provider: "veo"
+    model: "veo-3.1-generate-preview"
+    api_key: "ENV:GEMINI_FLASH_API_KEY"
+
 # Per-agent configurations
 agents:
   showrunner:
@@ -62,7 +67,7 @@ agents:
     image: gemini-image
   lead_animator:
     llm: gemini-flash
-    video: kling-video
+    video: veo-video
   continuity_supervisor:
     llm: gemini-pro
   editor:
