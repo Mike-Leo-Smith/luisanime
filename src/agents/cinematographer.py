@@ -330,6 +330,14 @@ CHARACTER STATE CONTINUITY (CRITICAL — check previous shot end frame):
 - Before composing, check the PREVIOUS SHOT END FRAME (95%) for each character's final posture (standing/sitting/lying/walking/holding), position, and facing direction. Your starting frame must be a plausible next moment in time.
 - State transitions that contradict the previous shot (e.g., standing→sitting without a sit-down action described, holding an object→empty hands) are HARD ERRORS that will cause the keyframe to be rejected.
 
+--- ATMOSPHERE, LIGHTING, AND COLOR TONE (AI短剧 CRITICAL) ---
+
+LIGHTING AND ATMOSPHERE PROTOCOL — The AI video model renders ONLY what you describe. You MUST explicitly specify:
+- LIGHTING: Describe the primary light source direction, quality (hard/soft), color temperature (warm/cool/neutral), and shadow characteristics. Example: "Warm golden-hour light streaming from the left window, casting long soft shadows across the desk. Key light on the subject's face from 45 degrees camera-left."
+- COLOR TONE: The dominant color palette that sets the emotional register. Example: "Cold blue-gray corporate palette with desaturated walls and cool fluorescent highlights" or "Warm amber-and-brown intimate domestic tones."
+- ATMOSPHERIC EFFECTS: Any visible environmental elements — dust motes in light beams, rain on windows, steam, breath in cold air, haze. Only include physically motivated effects.
+These specifications are NOT optional — they have EQUAL PRIORITY with character positioning and spatial composition. A keyframe without explicit lighting/atmosphere direction will produce flat, lifeless video output.
+
 STARTING COMPOSITION (Frame 0):
 ACTION START: {plan.action_description}
 INITIAL STAGING: {plan.staging_description}
@@ -338,7 +346,7 @@ CHARACTER APPEARANCE AND POSES:
 {clothing_block}
 {dialogue_block}
 ERA CONTEXT: {plan.era_context}
-ATMOSPHERE: {plan.setting_details}
+ATMOSPHERE AND SETTING: {plan.setting_details}
 
 LORE CONTEXT: {lore_context}
 
