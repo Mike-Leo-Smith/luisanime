@@ -7,7 +7,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.pipeline.project import ProjectManager
-from src.pipeline.state import AFCState, FinancialLedger
+from src.pipeline.state import (
+    AFCState,
+    FinancialLedger,
+    ShotExecutionPlan,
+    load_checkpoint,
+)
 from src.pipeline.graph import app as pipeline_app
 
 
@@ -63,7 +68,7 @@ def _get_initial_state(args, pm) -> AFCState:
         encoding="utf-8"
     )
 
-    return AFCState(
+    state = AFCState(
         workspace_root=str(pm.current_project),
         project_config=pm.project_config,
         novel_text=novel_text,
@@ -74,6 +79,7 @@ def _get_initial_state(args, pm) -> AFCState:
         active_shot_plan=None,
         current_proxy_path=None,
         current_keyframe_path=None,
+        current_storyboard_path=None,
         current_render_path=None,
         scene_dailies_paths=[],
         completed_scenes_paths=[],
@@ -83,6 +89,33 @@ def _get_initial_state(args, pm) -> AFCState:
         escalation_required=False,
         keyframe_is_reused_frame=False,
     )
+
+    should_resume = getattr(args, "resume", False)
+    if should_resume:
+        ckpt = load_checkpoint(str(pm.current_project))
+        if ckpt:
+            print(f"💾 [Resume] Restoring from checkpoint...")
+            state["unprocessed_scenes"] = ckpt.get("unprocessed_scenes", [])
+            state["current_scene_path"] = ckpt.get("current_scene_path")
+            state["completed_scenes_paths"] = ckpt.get("completed_scenes_paths", [])
+            state["scene_dailies_paths"] = ckpt.get("scene_dailies_paths", [])
+            raw_shots = ckpt.get("unprocessed_shots", [])
+            state["unprocessed_shots"] = [ShotExecutionPlan(**s) for s in raw_shots]
+            raw_active = ckpt.get("active_shot_plan")
+            state["active_shot_plan"] = (
+                ShotExecutionPlan(**raw_active) if raw_active else None
+            )
+            print(
+                f"   unprocessed_scenes: {len(state['unprocessed_scenes'])}, "
+                f"completed: {len(state['completed_scenes_paths'])}, "
+                f"scene_dailies: {len(state['scene_dailies_paths'])}, "
+                f"unprocessed_shots: {len(state['unprocessed_shots'])}, "
+                f"active_shot: {state['active_shot_plan'].shot_id if state['active_shot_plan'] else None}"
+            )
+        else:
+            print(f"💾 [Resume] No checkpoint found — starting fresh.")
+
+    return state
 
 
 def run_pipeline(args):
@@ -138,6 +171,7 @@ def main():
 
     rp = subparsers.add_parser("run")
     rp.add_argument("name")
+    rp.add_argument("--resume", action="store_true", help="Resume from last checkpoint")
     rp.add_argument(
         "--stage",
         help="Start from a specific stage (index, lore, scenes, shots, storyboard, animate, qa, post-prod)",
