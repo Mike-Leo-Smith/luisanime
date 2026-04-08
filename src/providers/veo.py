@@ -119,7 +119,6 @@ class VeoProvider(BaseVideoProvider):
         veo_config_kwargs: Dict[str, Any] = {
             "aspect_ratio": "16:9",
             "duration_seconds": duration,
-            "generate_audio": config.enable_audio,
             "person_generation": "allow_adult",
         }
 
@@ -238,21 +237,24 @@ class VeoProvider(BaseVideoProvider):
 
         print(f"  [Veo] Video generation complete, downloading...")
 
+        self.client.files.download(file=video)
         if hasattr(video, "video_bytes") and video.video_bytes:
-            print(f"  [Veo] Got video bytes directly ({len(video.video_bytes)} bytes)")
+            print(f"  [Veo] Downloaded {len(video.video_bytes)} bytes")
             return video.video_bytes
-        elif hasattr(video, "uri") and video.uri:
-            import requests as req_lib
 
-            print(f"  [Veo] Downloading from URI: {video.uri[:80]}...")
-            resp = req_lib.get(video.uri, timeout=120)
-            resp.raise_for_status()
-            print(f"  [Veo] Downloaded {len(resp.content)} bytes")
-            return resp.content
-        else:
-            raise Exception(
-                "Veo video has neither video_bytes nor uri to download from"
-            )
+        import tempfile, os
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            video.save(tmp_path)
+            with open(tmp_path, "rb") as f:
+                data = f.read()
+            print(f"  [Veo] Downloaded {len(data)} bytes via save()")
+            return data
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     def get_video_status(self, task_id: str) -> Dict[str, Any]:
         try:
