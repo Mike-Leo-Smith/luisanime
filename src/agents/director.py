@@ -50,6 +50,7 @@ SHOT_LIST_SCHEMA = {
                     "is_continuation": {"type": "BOOLEAN"},
                     "shot_scale": {"type": "STRING"},
                     "camera_angle": {"type": "STRING"},
+                    "focus_subject": {"type": "STRING"},
                     "spatial_composition": {
                         "type": "OBJECT",
                         "properties": {
@@ -86,6 +87,7 @@ SHOT_LIST_SCHEMA = {
                     "is_continuation",
                     "shot_scale",
                     "camera_angle",
+                    "focus_subject",
                     "spatial_composition",
                 ],
             },
@@ -111,8 +113,11 @@ class DirectorAgent(BaseCreative):
 
         prompt = f"""Generate ShotExecutionPlan JSONs for the following scene. Apply ALL rules from your system prompt.
 
-CONTINUITY RULE:
-The sequence must be SEAMLESS. staging_description and character_poses at the START of Shot N must match ending_composition_description of Shot N-1.
+CONTINUITY RULE (MOST IMPORTANT):
+- The sequence must tell a COHERENT visual story. Every cut must have a NARRATIVE REASON (new speaker, reaction, reveal, beat change). Never cut without motivation.
+- staging_description and character_poses at the START of Shot N must match ending_composition_description of Shot N-1.
+- Combine minor sequential actions into single shots using camera movement. Cut only at dramatic beat changes.
+- Think: "Would this sequence confuse a viewer watching without sound?" If yes, restructure.
 
 CONTINUATION MARKING:
 - is_continuation=true: shot continues the SAME action/camera movement from previous shot without a cut (same moment in time, no angle change, no new subject).
@@ -174,6 +179,7 @@ Scene Data:
 
             shot_data.setdefault("shot_scale", "")
             shot_data.setdefault("camera_angle", "")
+            shot_data.setdefault("focus_subject", "")
             spatial = shot_data.get("spatial_composition", {})
             if isinstance(spatial, dict):
                 shot_data["spatial_composition"] = {
@@ -196,7 +202,7 @@ Scene Data:
 
             dialogue_count = len(shot_data["dialogue"])
             print(
-                f"   🎞️ {shot.shot_id}: {shot.camera_movement} | scale={shot.shot_scale} | angle={shot.camera_angle} | duration={shot.target_duration_ms}ms | entities={shot.active_entities} | continuation={shot.is_continuation} | dialogue={dialogue_count} lines"
+                f"   🎞️ {shot.shot_id}: {shot.camera_movement} | scale={shot.shot_scale} | angle={shot.camera_angle} | focus={shot.focus_subject} | duration={shot.target_duration_ms}ms | entities={shot.active_entities} | continuation={shot.is_continuation} | dialogue={dialogue_count} lines"
             )
 
             cur_scale = _SCALE_ORDER.get(shot.shot_scale, 0)
@@ -220,9 +226,22 @@ def director_node(state: AFCState) -> Dict:
     print(f"🎬 [Director] === NODE ENTRY ===")
     current_scene = state.get("current_scene_path")
     unprocessed = state.get("unprocessed_scenes", [])
+    existing_shots = state.get("unprocessed_shots", [])
+    active_shot = state.get("active_shot_plan")
     print(f"   current_scene_path: {current_scene}")
     print(f"   unprocessed_scenes: {len(unprocessed)} — {unprocessed}")
+    print(f"   existing unprocessed_shots: {len(existing_shots)}")
+    print(f"   active_shot_plan: {active_shot.shot_id if active_shot else None}")
     print(f"{'=' * 60}")
+
+    # Resume: shots already queued from checkpoint — skip re-planning
+    if existing_shots or active_shot:
+        print(
+            f"🎬 [Director] Checkpoint resume — {len(existing_shots)} shots queued, "
+            f"active={active_shot.shot_id if active_shot else None}. Skipping re-plan."
+        )
+        print(f"🎬 [Director] === NODE EXIT === (resume)")
+        return {}
 
     from src.pipeline.workspace import AgenticWorkspace
 
