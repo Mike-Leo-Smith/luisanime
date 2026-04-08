@@ -60,13 +60,20 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         return chosen
 
     def execute_keyframe_check(
-        self, image_path: str, plan: ShotExecutionPlan, novel_context: str
+        self,
+        image_path: str,
+        plan: ShotExecutionPlan,
+        novel_context: str,
+        storyboard_path: Optional[str] = None,
     ) -> Dict:
         """
-        Inspects the keyframe for AIGC artifacts, novel conformance, AND Starting Frame requirements.
+        Inspects the keyframe for AIGC artifacts, novel conformance, Starting Frame requirements,
+        and consistency with storyboard Panel 1.
         """
         print(f"🧐 [Continuity Supervisor] Keyframe check for {image_path}")
         print(f"   Shot: {plan.shot_id} | Action: {plan.action_description[:150]}...")
+        if storyboard_path:
+            print(f"   Storyboard: {storyboard_path}")
 
         entity_list = (
             ", ".join(plan.active_entities)
@@ -74,6 +81,16 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
             else "none specified"
         )
         entity_count = len(plan.active_entities)
+
+        storyboard_instruction = ""
+        if storyboard_path:
+            storyboard_instruction = """
+        8. STORYBOARD PANEL 1 MATCH (CRITICAL — MUST CHECK): The second attached image is the storyboard for this shot, containing 3-4 sequential panels showing the planned action. The keyframe MUST closely match PANEL 1 (the leftmost panel) of this storyboard in:
+           - CHARACTER POSITIONS: Same characters in roughly the same locations within the frame.
+           - COMPOSITION/FRAMING: Same camera angle, shot scale, and spatial arrangement.
+           - ENVIRONMENT: Same background, lighting, and setting details.
+           - CHARACTER APPEARANCE: Same clothing, hair, and overall look.
+           Minor stylistic differences in rendering quality are acceptable (the storyboard is a sketch-level guide, the keyframe is final quality). But the SCENE CONTENT, LAYOUT, and CHARACTER PLACEMENT must match. If the keyframe shows a fundamentally different composition, framing, or character arrangement than Panel 1 of the storyboard, this is a FAIL: "STORYBOARD MISMATCH: [describe the discrepancy]"."""
 
         prompt = f"""Analyze this generated keyframe for a film adaptation.
         
@@ -83,28 +100,40 @@ Respond with ONLY the version number (1, 2, or 3). Nothing else."""
         INITIAL STAGING: {plan.staging_description}
         INITIAL POSES: {json.dumps(plan.character_poses, ensure_ascii=False)}
         ACTIVE ENTITIES (GROUND TRUTH): [{entity_list}] — EXACTLY {entity_count} character(s) should appear.
+        FOCUS SUBJECT: {plan.focus_subject}
         
         Original Novel Context: {novel_context}
+        
+        {"NOTE: Two images are attached. Image 1 is the KEYFRAME being evaluated. Image 2 is the STORYBOARD reference — compare the keyframe against Panel 1 (leftmost panel) of the storyboard." if storyboard_path else ""}
         
         Evaluation Criteria:
         1. STARTING FRAME ACCURACY: Does the image accurately depict the STARTING STATE described? Focus on the overall scene setup, not pixel-perfect pose matching.
         2. NOVEL CONFORMANCE: Does the image reflect characters and mood from the novel?
         3. AIGC ARTIFACTS: Check for mutated hands, floating limbs, distorted faces.
-        4. SPATIAL CONSISTENCY: If reference frames from previous shots are available, verify that the room layout, furniture positions, door orientations, window locations, prop placements, and lighting direction remain consistent across angles. Flag any contradictions in the physical environment.
-        5. DUPLICATE / EXTRA ENTITIES (STRICT — MUST CHECK): First, count every distinct human figure visible in the image. The EXPECTED count is EXACTLY {entity_count} ({entity_list}). If you count MORE figures than {entity_count}, this is an automatic HARD FAIL — even if the extra figure is blurry, partially occluded, in the background, or appears to be a reflection (unless a mirror is explicitly part of the staging). Also check: if the SAME character appears to be rendered twice in different positions, or if a phantom/ghost figure is visible that does not correspond to any listed entity, this is a HARD FAIL. Duplicate, phantom, or extra characters are critical AIGC hallucination artifacts that MUST be caught.
-        6. CHARACTER STATE CONTINUITY (STRICT — if previous shot reference frames are available): Check that each character's posture and action state is logically consistent with the PREVIOUS SHOT END FRAME. If a character was standing at the end of the previous shot, they must NOT be sitting or lying down in this frame (unless the shot plan explicitly describes them sitting down). If a character was holding an object, they should still have it. State regression (e.g., standing→sitting, holding→empty hands) without a described transition is a HARD FAIL.
+        4. CHARACTER AESTHETICS (IMPORTANT): Characters must look NATURAL and appealing. Check for: exaggerated intense stares or piercing gazes, unnaturally wide-open eyes, overly dramatic or forced facial expressions, stiff mannequin-like poses, theatrical or exaggerated body language, unnatural forced smiles. Characters should appear relaxed and natural, like real people — not performers. If any character has an obviously unnatural, exaggerated, or "over-acted" expression or pose, flag it as: "UNNATURAL EXPRESSION/POSE: [description of the issue]". This is a soft fail — flag it but do not auto-reject unless it is extreme.
+        5. SPATIAL CONSISTENCY: If reference frames from previous shots are available, verify that the room layout, furniture positions, door orientations, window locations, prop placements, and lighting direction remain consistent across angles. Flag any contradictions in the physical environment.
+        6. DUPLICATE / EXTRA ENTITIES (STRICT — MUST CHECK): First, count every distinct human figure visible in the image. The EXPECTED count is EXACTLY {entity_count} ({entity_list}). If you count MORE figures than {entity_count}, this is an automatic HARD FAIL — even if the extra figure is blurry, partially occluded, in the background, or appears to be a reflection (unless a mirror is explicitly part of the staging). Also check: if the SAME character appears to be rendered twice in different positions, or if a phantom/ghost figure is visible that does not correspond to any listed entity, this is a HARD FAIL. Duplicate, phantom, or extra characters are critical AIGC hallucination artifacts that MUST be caught.
+        7. CHARACTER STATE CONTINUITY (STRICT — if previous shot reference frames are available): Check that each character's posture and action state is logically consistent with the PREVIOUS SHOT END FRAME. If a character was standing at the end of the previous shot, they must NOT be sitting or lying down in this frame (unless the shot plan explicitly describes them sitting down). If a character was holding an object, they should still have it. State regression (e.g., standing→sitting, holding→empty hands) without a described transition is a HARD FAIL.{storyboard_instruction}
         
         IMPORTANT TOLERANCE RULES:
         - Mirror reflections are NATURALLY laterally inverted (left-right flipped). Do NOT flag mirrored handedness, reversed text in mirrors, or laterally inverted details as inconsistencies — this is physically correct behavior.
         - Minor deviations in character pose, stance, body angle, or exact positioning relative to the textual description are ACCEPTABLE and should be considered reasonable artistic/cinematographic interpretation. Only flag pose issues if they fundamentally contradict the narrative (e.g., a character described as sitting is shown standing, or a character meant to face another is facing away).
         - Slight differences in character spacing, hand placement, or head tilt compared to the description are NOT grounds for rejection — the cinematographer has creative latitude in composing the frame.
         
-        Respond with 'PASS' if the keyframe is acceptable (including minor artistic variations), or a detailed 'FAIL: [Reason]' ONLY for serious issues (AIGC artifacts, wrong characters, fundamentally wrong scene setup, broken spatial consistency)."""
+        Respond with 'PASS' if the keyframe is acceptable (including minor artistic variations), or a detailed 'FAIL: [Reason]' ONLY for serious issues (AIGC artifacts, wrong characters, fundamentally wrong scene setup, broken spatial consistency, extremely unnatural character aesthetics, storyboard Panel 1 mismatch)."""
+
+        image_paths = [self.workspace.get_physical_path(image_path)]
+        if storyboard_path and self.workspace.exists(storyboard_path):
+            image_paths.append(self.workspace.get_physical_path(storyboard_path))
+            print(
+                f"🧐 [Continuity Supervisor] Sending keyframe + storyboard to VLM for comparison"
+            )
 
         t0 = time.time()
-        response = self.llm.analyze_image(
-            image_path=self.workspace.get_physical_path(image_path), prompt=prompt
-        )
+        if len(image_paths) > 1:
+            response = self.llm.analyze_images(image_paths=image_paths, prompt=prompt)
+        else:
+            response = self.llm.analyze_image(image_path=image_paths[0], prompt=prompt)
         elapsed = time.time() - t0
 
         result_text = response.text
@@ -217,8 +246,12 @@ def continuity_supervisor_node(state: AFCState) -> Dict:
             return {"continuity_feedback": None}
 
         print(f"🧐 [Continuity Supervisor] Mode: KEYFRAME VALIDATION")
+        storyboard_path = state.get("current_storyboard_path")
         res = agent.execute_keyframe_check(
-            state["current_keyframe_path"], plan, state.get("novel_text", "")[:5000]
+            state["current_keyframe_path"],
+            plan,
+            state.get("novel_text", "")[:5000],
+            storyboard_path=storyboard_path,
         )
         if res["status"] == "PASS":
             print(
