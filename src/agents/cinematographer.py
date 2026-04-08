@@ -136,8 +136,10 @@ class CinematographerAgent(BaseExecutor):
                 f"Image {img_idx}: STORYBOARD for this shot — a 3-4 panel sequence "
                 f"showing the planned action progression. Your keyframe MUST match "
                 f"Panel 1 of this storyboard: same composition, character positions, "
-                f"environment, and framing. This is the visual plan you are realizing "
-                f"as a high-quality keyframe."
+                f"environment, and framing. Characters in the keyframe MUST closely "
+                f"match how they appear in the storyboard — same face, hairstyle, "
+                f"clothing, and overall look. This is the visual plan you are "
+                f"realizing as a high-quality keyframe."
             )
             extra_physical_refs.append(
                 self.workspace.get_physical_path(storyboard_path)
@@ -180,6 +182,7 @@ RULES:
 - No on-screen text, subtitles, captions, dialogue bubbles, or watermarks.
 - NO borders, padding, margins, letterboxing, or white edges. The image content MUST fill the entire canvas edge-to-edge.
 - EXACTLY {entity_count} character(s): [{entity_list}]. No extra figures, no background people, no crowd members, no reflections of people not listed.
+- CHARACTER IDENTITY (CRITICAL): Each character MUST closely match how they appear in the STORYBOARD (if attached) and the CHARACTER DESIGN reference images. Reproduce the SAME face (facial features, face shape, skin tone), SAME hairstyle (color, length, style), and SAME clothing (outfit, colors, accessories). Characters must be visually recognizable as the SAME person across storyboard, design sheets, and this keyframe.
 - CHARACTER AESTHETICS: All characters must look NATURAL and appealing. Relaxed expressions (gentle smile, calm gaze, soft brow). Comfortable organic postures. No intense stares, exaggerated wide eyes, theatrical poses, stiff mannequin stances, or forced expressions. Characters should look like real people captured candidly.
 
 {ref_manifest}
@@ -341,6 +344,7 @@ A storyboard panel sequence for a single cinematic shot. Draw 3-4 sequential pan
 
 RULES:
 - MATCH the visual style of the attached design reference images exactly. Use the SAME art style, color palette, rendering quality, and character designs.
+- CHARACTER IDENTITY (CRITICAL): Each character MUST strictly replicate their attached CHARACTER DESIGN reference image. Reproduce the EXACT SAME face (facial features, face shape, skin tone), the EXACT SAME hairstyle (color, length, style), and the EXACT SAME clothing (outfit, colors, accessories). Characters must be visually recognizable as the SAME person shown in their design sheet. Do NOT alter, simplify, or reinterpret any character's appearance.
 - EXACTLY {entity_count} character(s): [{entity_list}]. No extra figures, no background people, no crowd members, no reflections of people not listed.
 - NO borders, padding, margins, or white edges around the image. Content must fill the entire canvas.
 - CHARACTER AESTHETICS: All characters must have NATURAL, relaxed expressions and comfortable postures. No intense stares, exaggerated wide eyes, theatrical poses, or forced expressions. Subtle, understated body language only.
