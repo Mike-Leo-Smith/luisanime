@@ -4,9 +4,11 @@ from src.pipeline.state import AFCState
 from src.agents.showrunner import showrunner_node
 from src.agents.screenwriter import screenwriter_node
 from src.agents.production_designer import production_designer_node
+from src.agents.design_qa import design_qa_node
 from src.agents.director import director_node
 from src.agents.script_coordinator import script_coordinator_node
 from src.agents.cinematographer import cinematographer_node
+from src.agents.storyboard_qa import storyboard_qa_node
 from src.agents.lead_animator import lead_animator_node
 from src.agents.continuity_supervisor import continuity_supervisor_node
 from src.agents.editor import editor_node
@@ -45,6 +47,63 @@ def route_after_script_coordinator(
     print(f"   ➡️  DECISION: Route to 'editor' (all shots done for this scene)")
     print(f"{'=' * 60}\n")
     return "editor"
+
+
+def route_after_design_qa(
+    state: AFCState,
+) -> Literal["cinematographer", "production_designer"]:
+    feedback = state.get("design_feedback")
+    retry = state.get("design_retry_count", 0)
+
+    print(f"\n{'=' * 60}")
+    print(f"🔀 [ROUTER] route_after_design_qa")
+    print(f"   design_feedback: {feedback[:100] if feedback else None}")
+    print(f"   design_retry_count: {retry}")
+
+    if not feedback:
+        print(f"   ➡️  DECISION: Route to 'cinematographer' (designs approved)")
+        print(f"{'=' * 60}\n")
+        return "cinematographer"
+
+    print(
+        f"   ➡️  DECISION: Route to 'production_designer' (designs rejected, retry #{retry})"
+    )
+    print(f"{'=' * 60}\n")
+    return "production_designer"
+
+
+def route_after_storyboard_qa(
+    state: AFCState,
+) -> Literal["continuity_supervisor", "cinematographer"]:
+    feedback = state.get("storyboard_feedback")
+    retry = state.get("storyboard_retry_count", 0)
+    has_keyframe = state.get("current_keyframe_path") is not None
+
+    print(f"\n{'=' * 60}")
+    print(f"🔀 [ROUTER] route_after_storyboard_qa")
+    print(f"   storyboard_feedback: {feedback[:100] if feedback else None}")
+    print(f"   storyboard_retry_count: {retry}")
+    print(f"   current_keyframe_path: {state.get('current_keyframe_path')}")
+
+    if feedback:
+        print(
+            f"   ➡️  DECISION: Route to 'cinematographer' (storyboard rejected, retry #{retry})"
+        )
+        print(f"{'=' * 60}\n")
+        return "cinematographer"
+
+    if not has_keyframe:
+        print(
+            f"   ➡️  DECISION: Route to 'cinematographer' (storyboard approved, keyframe needed)"
+        )
+        print(f"{'=' * 60}\n")
+        return "cinematographer"
+
+    print(
+        f"   ➡️  DECISION: Route to 'continuity_supervisor' (storyboard approved, keyframe exists)"
+    )
+    print(f"{'=' * 60}\n")
+    return "continuity_supervisor"
 
 
 def route_after_continuity_supervisor(
@@ -117,9 +176,11 @@ workflow = StateGraph(AFCState)
 workflow.add_node("showrunner", showrunner_node)
 workflow.add_node("screenwriter", screenwriter_node)
 workflow.add_node("production_designer", production_designer_node)
+workflow.add_node("design_qa", design_qa_node)
 workflow.add_node("director", director_node)
 workflow.add_node("script_coordinator", script_coordinator_node)
 workflow.add_node("cinematographer", cinematographer_node)
+workflow.add_node("storyboard_qa", storyboard_qa_node)
 workflow.add_node("lead_animator", lead_animator_node)
 workflow.add_node("continuity_supervisor", continuity_supervisor_node)
 workflow.add_node("editor", editor_node)
@@ -138,8 +199,28 @@ workflow.add_conditional_edges(
     {"production_designer": "production_designer", "editor": "editor"},
 )
 
-workflow.add_edge("production_designer", "cinematographer")
-workflow.add_edge("cinematographer", "continuity_supervisor")
+workflow.add_edge("production_designer", "design_qa")
+
+workflow.add_conditional_edges(
+    "design_qa",
+    route_after_design_qa,
+    {
+        "cinematographer": "cinematographer",
+        "production_designer": "production_designer",
+    },
+)
+
+workflow.add_edge("cinematographer", "storyboard_qa")
+
+workflow.add_conditional_edges(
+    "storyboard_qa",
+    route_after_storyboard_qa,
+    {
+        "continuity_supervisor": "continuity_supervisor",
+        "cinematographer": "cinematographer",
+    },
+)
+
 workflow.add_edge("lead_animator", "continuity_supervisor")
 
 workflow.add_conditional_edges(

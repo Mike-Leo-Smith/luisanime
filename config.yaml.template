@@ -70,6 +70,10 @@ agents:
     video: kling-video
   continuity_supervisor:
     llm: gemini-pro
+  design_qa:
+    llm: gemini-pro
+  storyboard_qa:
+    llm: gemini-pro
   editor:
     llm: gemini-flash
 
