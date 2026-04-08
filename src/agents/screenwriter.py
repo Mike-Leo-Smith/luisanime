@@ -91,6 +91,19 @@ def screenwriter_node(state: AFCState) -> Dict:
     print(f"   workspace_root: {state['workspace_root']}")
     print(f"{'=' * 60}")
 
+    # Resume: if unprocessed_scenes is already populated (from checkpoint),
+    # skip re-parsing — scenes are already on disk.
+    existing_scenes = state.get("unprocessed_scenes", [])
+    completed = state.get("completed_scenes_paths", [])
+    if existing_scenes or completed:
+        all_scenes = existing_scenes + completed
+        print(
+            f"✍️ [Screenwriter] Checkpoint detected — skipping parse. "
+            f"{len(existing_scenes)} unprocessed + {len(completed)} completed scenes."
+        )
+        print(f"✍️ [Screenwriter] === NODE EXIT === (resume, {len(all_scenes)} scenes)")
+        return {"unprocessed_scenes": existing_scenes}
+
     from src.pipeline.workspace import AgenticWorkspace
 
     ws = AgenticWorkspace(state["workspace_root"])

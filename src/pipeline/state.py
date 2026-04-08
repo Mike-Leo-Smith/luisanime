@@ -1,5 +1,7 @@
 from typing import TypedDict, List, Optional, Dict, Any, Annotated
+import json
 import operator
+import os
 from pydantic import BaseModel, Field
 
 
@@ -42,6 +44,7 @@ class ShotExecutionPlan(BaseModel):
     spatial_composition: Dict[str, str] = Field(
         default_factory=dict
     )  # Keys: framing_type, foreground_element, midground_subject, background_element, depth_of_field, composition_technique
+    focus_subject: str = ""
     # Continuity linkage
     ending_composition_description: str = ""
     is_continuation: bool = False
@@ -61,6 +64,7 @@ class AFCState(TypedDict):
 
     current_proxy_path: Annotated[Optional[str], _replace]
     current_keyframe_path: Annotated[Optional[str], _replace]
+    current_storyboard_path: Annotated[Optional[str], _replace]
     current_render_path: Annotated[Optional[str], _replace]
 
     scene_dailies_paths: Annotated[List[str], _replace]
@@ -71,3 +75,46 @@ class AFCState(TypedDict):
     continuity_feedback: Annotated[Optional[str], _replace]
     escalation_required: Annotated[bool, _replace]
     keyframe_is_reused_frame: Annotated[bool, _replace]
+
+
+# ── Checkpoint save/load ──────────────────────────────────────────
+
+CHECKPOINT_FILENAME = "checkpoint.json"
+
+
+def save_checkpoint(workspace_root: str, state: AFCState) -> str:
+    """Persist pipeline progress to disk after each completed shot/scene.
+
+    Only serialises the fields needed to reconstruct a resume-able state.
+    Returns the path to the checkpoint file.
+    """
+    data = {
+        "unprocessed_scenes": state.get("unprocessed_scenes", []),
+        "current_scene_path": state.get("current_scene_path"),
+        "completed_scenes_paths": state.get("completed_scenes_paths", []),
+        "scene_dailies_paths": state.get("scene_dailies_paths", []),
+        "unprocessed_shots": [
+            s.model_dump() for s in state.get("unprocessed_shots", [])
+        ],
+        "active_shot_plan": (
+            state["active_shot_plan"].model_dump()
+            if state.get("active_shot_plan")
+            else None
+        ),
+    }
+    ckpt_path = os.path.join(workspace_root, CHECKPOINT_FILENAME)
+    with open(ckpt_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"💾 [Checkpoint] Saved to {ckpt_path}")
+    return ckpt_path
+
+
+def load_checkpoint(workspace_root: str) -> Optional[Dict[str, Any]]:
+    """Load a checkpoint file if it exists. Returns None if not found."""
+    ckpt_path = os.path.join(workspace_root, CHECKPOINT_FILENAME)
+    if not os.path.exists(ckpt_path):
+        return None
+    with open(ckpt_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    print(f"💾 [Checkpoint] Loaded from {ckpt_path}")
+    return data

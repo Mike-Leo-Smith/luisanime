@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional
 import json
 import time
 from src.agents.base import BaseState
-from src.pipeline.state import AFCState
+from src.pipeline.state import AFCState, save_checkpoint
 from src.agents.prompts import SCRIPT_COORDINATOR_PROMPT
 
 MUTATION_SCHEMA = {
@@ -114,7 +114,7 @@ def script_coordinator_node(state: AFCState) -> Dict:
     print(
         f"📖 [Script Coordinator] === NODE EXIT === active={active_shot_plan.shot_id}, {len(remaining)} queued"
     )
-    return {
+    result = {
         "active_shot_plan": active_shot_plan,
         "unprocessed_shots": remaining,
         "current_render_path": None,
@@ -125,3 +125,5 @@ def script_coordinator_node(state: AFCState) -> Dict:
         "keyframe_retry_count": 0,
         "keyframe_is_reused_frame": False,
     }
+    save_checkpoint(state["workspace_root"], {**state, **result})  # type: ignore[arg-type]
+    return result

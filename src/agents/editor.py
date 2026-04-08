@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 import ffmpeg
 from src.agents.base import BaseCompiler
-from src.pipeline.state import AFCState
+from src.pipeline.state import AFCState, save_checkpoint
 
 
 class EditorAgent(BaseCompiler):
@@ -144,8 +144,10 @@ def editor_node(state: AFCState) -> Dict:
 
     print(f"✂️ [Editor] === NODE EXIT === master={master_path}")
     print(f"   Clearing scene_dailies_paths, current_scene_path")
-    return {
+    result = {
         "completed_scenes_paths": completed,
         "scene_dailies_paths": [],
         "current_scene_path": None,
     }
+    save_checkpoint(state["workspace_root"], {**state, **result})  # type: ignore[arg-type]
+    return result
