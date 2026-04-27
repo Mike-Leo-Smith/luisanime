@@ -46,6 +46,12 @@ class ProviderFactory:
                 base_url=config.get("base_url", "https://api.minimaxi.com/v1"),
                 image_model=config.get("model", "image-01"),
             )
+        elif provider_type == "openai":
+            return OpenAICompatibleProvider(
+                api_key=api_key,
+                base_url=config.get("base_url", "https://api.openai.com/v1"),
+                model=config.get("model", "gpt-image-2"),
+            )
         else:
             raise ValueError(f"Unknown image provider: {provider_type}")
 

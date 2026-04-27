@@ -33,6 +33,12 @@ models:
     model: "gemini-3.1-flash-image-preview"
     api_key: "ENV:GEMINI_FLASH_API_KEY"
 
+  gpt-image-2:
+    provider: "openai"
+    model: "gpt-image-2"
+    base_url: "https://www.dogapi.cc/v1"
+    api_key: "ENV:DOGAPI_API_KEY"
+
   minimax-video:
     provider: "minimax"
     model: "MiniMax-Hailuo-2.3"

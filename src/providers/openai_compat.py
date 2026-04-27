@@ -1,7 +1,10 @@
 import json
+import base64
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
+import httpx
 import openai
+import requests
 from .base import (
     BaseLLMProvider,
     BaseImageProvider,
@@ -12,12 +15,30 @@ from .base import (
 )
 
 
+class _StainlessStrippingClient(httpx.Client):
+    """Strip `x-stainless-*` telemetry headers; some proxies (e.g. dogapi.cc) reject requests carrying them."""
+
+    def send(self, request, **kwargs):
+        for header in list(request.headers.keys()):
+            if header.lower().startswith("x-stainless"):
+                del request.headers[header]
+        return super().send(request, **kwargs)
+
+
+def _build_openai_client(api_key: str, base_url: str) -> openai.OpenAI:
+    return openai.OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        http_client=_StainlessStrippingClient(timeout=httpx.Timeout(600.0, connect=30.0)),
+    )
+
+
 class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
     def __init__(self, api_key: str, base_url: str, model: str):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
-        self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        self.client = _build_openai_client(api_key, base_url)
 
     def generate_text(
         self,
@@ -153,11 +174,21 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
         raise NotImplementedError("Video analysis not supported by OpenAI provider yet")
 
     def generate_image(
-        self, prompt: str, config: Optional[ImageGenerationConfig] = None
+        self,
+        prompt: str,
+        config: Optional[ImageGenerationConfig] = None,
+        reference_media: Optional[Union[str, List[str]]] = None,
     ) -> ImageResponse:
-        raise NotImplementedError(
-            "Image generation not supported by generic OpenAI-compatible provider"
-        )
+        config = config or ImageGenerationConfig()
+
+        if reference_media is None and config.reference_media:
+            reference_media = config.reference_media
+
+        if reference_media:
+            paths = [reference_media] if isinstance(reference_media, str) else list(reference_media)
+            return self._call_edits(prompt=prompt, image_paths=paths, config=config)
+
+        return self._call_generations(prompt=prompt, config=config)
 
     def edit_image(
         self,
@@ -165,4 +196,93 @@ class OpenAICompatibleProvider(BaseLLMProvider, BaseImageProvider):
         prompt: str,
         config: Optional[ImageGenerationConfig] = None,
     ) -> ImageResponse:
-        raise NotImplementedError("Image editing not supported")
+        config = config or ImageGenerationConfig()
+        return self._call_edits(prompt=prompt, image_paths=[image_path], config=config)
+
+    def _size_string(self, config: ImageGenerationConfig) -> str:
+        return f"{config.width}x{config.height}"
+
+    def _call_generations(
+        self, prompt: str, config: ImageGenerationConfig
+    ) -> ImageResponse:
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "n": config.num_images,
+            "size": self._size_string(config),
+        }
+        url = f"{self.base_url.rstrip('/')}/images/generations"
+        resp = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=600,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        return self._extract_image(body)
+
+    def _call_edits(
+        self,
+        prompt: str,
+        image_paths: List[str],
+        config: ImageGenerationConfig,
+    ) -> ImageResponse:
+        files: List[Any] = []
+        for path in image_paths:
+            p = Path(path)
+            mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
+            files.append(("image[]", (p.name, p.read_bytes(), mime)))
+
+        data = {
+            "model": self.model,
+            "prompt": prompt,
+            "n": str(config.num_images),
+            "size": self._size_string(config),
+        }
+        url = f"{self.base_url.rstrip('/')}/images/edits"
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            files=files,
+            data=data,
+            timeout=600,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        return self._extract_image(body)
+
+    def _extract_image(self, body: Dict[str, Any]) -> ImageResponse:
+        data = body.get("data") or []
+        if not data:
+            raise ValueError(f"No image data in response: {body}")
+        first = data[0]
+
+        b64 = first.get("b64_json")
+        if b64:
+            image_bytes = base64.b64decode(b64)
+            mime = "image/png"
+        else:
+            image_url = first.get("url")
+            if not image_url:
+                raise ValueError(f"No url or b64_json in response item: {first}")
+            r = requests.get(image_url, timeout=120)
+            r.raise_for_status()
+            image_bytes = r.content
+            mime = r.headers.get("Content-Type", "image/png").split(";")[0].strip()
+
+        usage = body.get("usage") or {}
+        return ImageResponse(
+            image_bytes=image_bytes,
+            mime_type=mime,
+            usage={
+                "input_tokens": usage.get("input_tokens", 0),
+                "output_tokens": usage.get("output_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            },
+            model=self.model,
+            cost_usd=0.0,
+        )
