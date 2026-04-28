@@ -5,14 +5,20 @@
 <title>AFP HITL Inspector</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   body { font-family: ui-sans-serif, system-ui, sans-serif; }
   pre { white-space: pre-wrap; word-break: break-word; }
+  .node-rect { cursor: pointer; transition: all .15s; }
+  .node-rect:hover { filter: brightness(1.1); }
+  textarea.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  details > summary { cursor: pointer; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
 <div x-data="inspector()" x-init="init()" class="flex h-screen">
-  <aside class="w-72 bg-slate-900 text-slate-100 p-4 overflow-y-auto">
+
+  <aside class="w-64 bg-slate-900 text-slate-100 p-4 overflow-y-auto shrink-0">
     <h1 class="text-lg font-semibold mb-4">AFP HITL</h1>
     <div class="mb-6">
       <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">New Run</h2>
@@ -43,7 +49,8 @@
   </aside>
 
   <main class="flex-1 flex flex-col overflow-hidden">
-    <header class="bg-white border-b px-6 py-3 flex items-center gap-4">
+
+    <header class="bg-white border-b px-6 py-3 flex items-center gap-6 shrink-0">
       <div>
         <div class="text-xs text-slate-500">Run</div>
         <div class="font-mono text-sm" x-text="runId || '—'"></div>
@@ -69,23 +76,173 @@
       </div>
     </header>
 
-    <div class="flex-1 grid grid-cols-2 overflow-hidden">
-      <section class="border-r overflow-y-auto p-4">
-        <h2 class="text-sm font-semibold text-slate-700 mb-2">State</h2>
-        <pre class="text-xs bg-slate-900 text-slate-100 p-3 rounded" x-text="JSON.stringify(snapshot.values || {}, null, 2)"></pre>
-      </section>
-      <section class="overflow-y-auto p-4">
-        <h2 class="text-sm font-semibold text-slate-700 mb-2">Event log</h2>
-        <ul class="space-y-1 text-xs font-mono">
-          <template x-for="(e, i) in events" :key="i">
-            <li class="border-b py-1">
-              <span class="text-slate-400" x-text="e.ts?.slice(11,19) || ''"></span>
-              <span class="font-semibold" x-text="e.type"></span>
-              <span x-text="e.node ? '· ' + e.node : ''"></span>
-              <span class="text-slate-500" x-text="e.payload ? JSON.stringify(e.payload) : ''"></span>
-            </li>
+    <div x-show="!runId" class="flex-1 flex items-center justify-center text-slate-400 text-sm">
+      Select or create a run.
+    </div>
+
+    <div x-show="runId" class="flex-1 grid grid-cols-12 overflow-hidden">
+
+      <section class="col-span-3 border-r overflow-y-auto p-3 bg-white">
+        <h2 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Pipeline</h2>
+        <svg :viewBox="`0 0 200 ${30 + agentNodes.length * 40}`" class="w-full">
+          <template x-for="(n, i) in agentNodes" :key="n">
+            <g :transform="`translate(10, ${10 + i * 40})`" @click="filterNode = (filterNode===n ? null : n); reloadArtifacts()">
+              <rect width="180" height="30" rx="4" class="node-rect"
+                    :fill="nodeFill(n)" :stroke="filterNode===n ? '#1e40af' : '#cbd5e1'"
+                    :stroke-width="filterNode===n ? 2 : 1" />
+              <text x="10" y="19" font-size="12" font-family="ui-monospace, monospace"
+                    :fill="nodeText(n)" x-text="n"></text>
+            </g>
           </template>
-        </ul>
+          <template x-for="i in agentNodes.length - 1" :key="i">
+            <line x1="100" :y1="40 + (i-1) * 40" x2="100" :y2="40 + (i-1) * 40 + 10"
+                  stroke="#94a3b8" stroke-width="1" />
+          </template>
+        </svg>
+
+        <div class="mt-4 pt-3 border-t">
+          <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">State (raw)</h3>
+          <details>
+            <summary class="text-xs text-slate-600">view JSON</summary>
+            <pre class="text-[10px] bg-slate-900 text-slate-100 p-2 rounded mt-1 max-h-64 overflow-auto"
+                 x-text="JSON.stringify(snapshot.values || {}, null, 2)"></pre>
+          </details>
+        </div>
+
+        <div class="mt-4 pt-3 border-t">
+          <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Events</h3>
+          <ul class="space-y-0.5 text-[11px] font-mono max-h-64 overflow-y-auto">
+            <template x-for="(e, i) in events" :key="i">
+              <li class="border-b py-0.5">
+                <span class="text-slate-400" x-text="e.ts?.slice(11,19) || ''"></span>
+                <span class="font-semibold" x-text="e.type"></span>
+                <span x-text="e.node ? '· ' + e.node : ''"></span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </section>
+
+      <section class="col-span-3 border-r overflow-y-auto p-3 bg-slate-50">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs uppercase tracking-wider text-slate-500">Artifacts</h2>
+          <button x-show="filterNode" @click="filterNode=null; reloadArtifacts()"
+                  class="text-[10px] text-blue-600 hover:underline">clear filter</button>
+        </div>
+        <div x-show="filterNode" class="text-[11px] text-slate-500 mb-2">
+          filtered to <span class="font-mono" x-text="filterNode"></span>
+        </div>
+
+        <template x-for="(items, group) in artifacts" :key="group">
+          <div class="mb-3" x-show="hasArtifacts(items)">
+            <div class="text-[11px] font-semibold text-slate-700 mb-1" x-text="group"></div>
+
+            <template x-if="group === 'dailies'">
+              <div class="space-y-2">
+                <template x-for="shot in items" :key="shot.shot_id">
+                  <details>
+                    <summary class="text-[11px] text-slate-700 font-mono" x-text="shot.shot_id"></summary>
+                    <ul class="ml-3 mt-1 space-y-0.5">
+                      <template x-for="f in shot.files" :key="f.path">
+                        <li>
+                          <button @click="openFile(f)"
+                                  :class="selected?.path===f.path ? 'bg-blue-100' : 'hover:bg-white'"
+                                  class="w-full text-left text-[11px] px-1 py-0.5 rounded">
+                            <span :class="kindColor(f.kind)" class="inline-block w-12 text-[9px] uppercase" x-text="f.kind"></span>
+                            <span x-text="f.name"></span>
+                          </button>
+                        </li>
+                      </template>
+                    </ul>
+                  </details>
+                </template>
+              </div>
+            </template>
+
+            <template x-if="group !== 'dailies'">
+              <ul class="space-y-0.5">
+                <template x-for="f in items" :key="f.path">
+                  <li>
+                    <button @click="openFile(f)"
+                            :class="selected?.path===f.path ? 'bg-blue-100' : 'hover:bg-white'"
+                            class="w-full text-left text-[11px] px-1 py-0.5 rounded">
+                      <span :class="kindColor(f.kind)" class="inline-block w-12 text-[9px] uppercase" x-text="f.kind"></span>
+                      <span x-text="f.name"></span>
+                    </button>
+                  </li>
+                </template>
+              </ul>
+            </template>
+          </div>
+        </template>
+      </section>
+
+      <section class="col-span-6 overflow-y-auto p-4 bg-white">
+        <div x-show="!selected" class="text-slate-400 text-sm">Pick an artifact.</div>
+
+        <div x-show="selected" class="space-y-3">
+          <div class="flex items-center gap-2 border-b pb-2">
+            <span :class="kindColor(selected?.kind)" class="text-[10px] uppercase font-semibold" x-text="selected?.kind"></span>
+            <span class="font-mono text-xs text-slate-700" x-text="selected?.path"></span>
+            <div class="ml-auto flex gap-2">
+              <a x-show="selected" :href="artifactUrl(selected?.path)" target="_blank"
+                 class="text-xs text-blue-600 hover:underline">open ↗</a>
+              <button x-show="selected?.editable && editing"
+                      @click="saveAndResume()"
+                      class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-500">
+                Save & Resume
+              </button>
+              <button x-show="selected?.editable && editing"
+                      @click="saveOnly()"
+                      class="text-xs border px-2 py-1 rounded hover:bg-slate-50">
+                Save
+              </button>
+              <button x-show="selected?.editable && !editing"
+                      @click="editing = true"
+                      class="text-xs border px-2 py-1 rounded hover:bg-slate-50">
+                Edit
+              </button>
+            </div>
+          </div>
+
+          <template x-if="selected?.kind === 'image'">
+            <img :src="artifactUrl(selected.path)" class="max-w-full rounded border" />
+          </template>
+
+          <template x-if="selected?.kind === 'video'">
+            <video :src="artifactUrl(selected.path)" controls class="max-w-full rounded border"></video>
+          </template>
+
+          <template x-if="['json','text','markdown'].includes(selected?.kind) && !editing">
+            <div>
+              <template x-if="selected?.kind === 'markdown'">
+                <div class="prose prose-sm max-w-none" x-html="renderMarkdown(textContent)"></div>
+              </template>
+              <template x-if="selected?.kind !== 'markdown'">
+                <pre class="text-xs bg-slate-50 border rounded p-3" x-text="textContent"></pre>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="selected?.editable && editing">
+            <textarea x-model="textContent" class="editor w-full h-[60vh] border rounded p-3"></textarea>
+          </template>
+
+          <template x-if="selected?.kind === 'binary'">
+            <div class="text-xs text-slate-500">Binary file — open in new tab.</div>
+          </template>
+
+          <div x-show="filterNode" class="border-t pt-3 mt-4">
+            <div class="text-xs font-semibold text-slate-700 mb-2">Re-run from this node</div>
+            <p class="text-[11px] text-slate-500 mb-2">
+              Resets retry counters / feedback so the next Resume re-executes <span class="font-mono" x-text="filterNode"></span>.
+            </p>
+            <button @click="regenerate(filterNode)"
+                    class="text-xs bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-500">
+              Regenerate from <span x-text="filterNode"></span>
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   </main>
@@ -96,8 +253,13 @@ function inspector() {
   return {
     projects: [], runs: [], runId: null, newProject: '',
     snapshot: {}, events: [], ws: null,
+    agentNodes: [], finishedNodes: new Set(),
+    artifacts: {}, filterNode: null,
+    selected: null, textContent: '', editing: false,
 
     async init() {
+      const meta = await fetch('/api/meta').then(r => r.json());
+      this.agentNodes = meta.agent_nodes || [];
       this.projects = await fetch('/api/projects').then(r => r.json());
       await this.loadRuns();
     },
@@ -114,14 +276,22 @@ function inspector() {
     },
     async selectRun(id) {
       this.runId = id;
-      this.events = [];
+      this.events = []; this.finishedNodes = new Set();
+      this.selected = null; this.textContent = ''; this.editing = false;
+      this.filterNode = null;
       await this.refresh();
+      await this.reloadArtifacts();
       this.openSocket();
     },
     async refresh() {
       if (!this.runId) return;
       this.snapshot = await fetch('/api/runs/' + this.runId).then(r => r.json());
       await this.loadRuns();
+    },
+    async reloadArtifacts() {
+      if (!this.runId) return;
+      const url = '/api/runs/' + this.runId + '/artifacts' + (this.filterNode ? '?node=' + this.filterNode : '');
+      this.artifacts = await fetch(url).then(r => r.json());
     },
     openSocket() {
       if (this.ws) { this.ws.close(); this.ws = null; }
@@ -131,7 +301,11 @@ function inspector() {
         const ev = JSON.parse(m.data);
         if (ev.type === 'snapshot') { this.snapshot = ev.data; return; }
         this.events.unshift(ev);
-        if (['run_paused','run_completed','run_error','node_finished'].includes(ev.type)) this.refresh();
+        if (ev.type === 'node_finished' && ev.node) this.finishedNodes.add(ev.node);
+        if (['run_paused','run_completed','run_error','node_finished'].includes(ev.type)) {
+          this.refresh();
+          if (ev.type !== 'node_finished') this.reloadArtifacts();
+        }
       };
     },
     async resume() {
@@ -140,9 +314,61 @@ function inspector() {
         body: JSON.stringify({})
       });
     },
+    async regenerate(node) {
+      if (!confirm(`Re-run from "${node}"? Retry counters and feedback for this stage will be reset.`)) return;
+      await fetch('/api/runs/' + this.runId + '/regenerate', {
+        method: 'POST', headers: {'content-type': 'application/json'},
+        body: JSON.stringify({node})
+      });
+    },
+    async openFile(f) {
+      this.selected = f;
+      this.editing = false;
+      this.textContent = '';
+      if (['json','text','markdown'].includes(f.kind)) {
+        const r = await fetch('/api/runs/' + this.runId + '/artifact/text?path=' + encodeURIComponent(f.path))
+          .then(x => x.json());
+        this.textContent = r.content || '';
+      }
+    },
+    async saveOnly() {
+      await fetch('/api/runs/' + this.runId + '/artifact/text', {
+        method: 'PUT', headers: {'content-type': 'application/json'},
+        body: JSON.stringify({path: this.selected.path, content: this.textContent})
+      });
+      this.editing = false;
+    },
+    async saveAndResume() {
+      await this.saveOnly();
+      await this.resume();
+    },
+    artifactUrl(path) {
+      return '/api/runs/' + this.runId + '/artifact?path=' + encodeURIComponent(path);
+    },
+    hasArtifacts(items) {
+      return Array.isArray(items) && items.length > 0;
+    },
+    nodeFill(n) {
+      const next = (this.snapshot.next || []);
+      if (next.includes(n)) return '#fde68a';
+      if (this.snapshot.last_node === n) return '#bfdbfe';
+      if (this.finishedNodes.has(n)) return '#bbf7d0';
+      return '#f1f5f9';
+    },
+    nodeText(n) {
+      return ((this.snapshot.next || []).includes(n) || this.snapshot.last_node === n) ? '#0f172a' : '#475569';
+    },
     statusColor() {
       return ({running:'text-blue-600', paused:'text-amber-600',
                completed:'text-emerald-600', error:'text-red-600'})[this.snapshot.status] || 'text-slate-600';
+    },
+    kindColor(k) {
+      return ({image:'text-pink-600', video:'text-purple-600', json:'text-blue-600',
+               markdown:'text-emerald-600', text:'text-slate-600', binary:'text-slate-400'})[k] || 'text-slate-500';
+    },
+    renderMarkdown(s) {
+      try { return window.marked ? marked.parse(s || '') : (s || ''); }
+      catch(e) { return s || ''; }
     },
   };
 }
