@@ -13,6 +13,25 @@
   .node-rect:hover { filter: brightness(1.1); }
   textarea.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   details > summary { cursor: pointer; }
+  .graph-canvas { display: block; cursor: grab; background:
+      linear-gradient(#f8fafc, #f8fafc),
+      radial-gradient(circle at 1px 1px, #e2e8f0 1px, transparent 0);
+    background-size: 100% 100%, 16px 16px;
+    background-blend-mode: multiply;
+    border-radius: 6px;
+  }
+  .graph-canvas:active { cursor: grabbing; }
+  .graph-tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(15,23,42,.95); color: #f1f5f9;
+    padding: 6px 8px; border-radius: 4px;
+    font-size: 11px; font-family: ui-monospace, monospace;
+    max-width: 240px; line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    z-index: 10; opacity: 0; transition: opacity .1s;
+  }
+  .graph-tooltip.show { opacity: 1; }
+  .legend-dot { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:middle; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -20,37 +39,77 @@
 
   <aside class="w-64 bg-slate-900 text-slate-100 p-4 overflow-y-auto shrink-0">
     <h1 class="text-lg font-semibold mb-4">AFP HITL</h1>
-    <div class="mb-6">
-      <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">New Run</h2>
-      <select x-model="newProject" class="w-full bg-slate-800 text-slate-100 p-2 rounded text-sm mb-2">
-        <option value="">Select project…</option>
-        <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
-      </select>
-      <button @click="createRun()" :disabled="!newProject"
-              class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 rounded text-sm">
-        Start
-      </button>
+
+    <div class="flex gap-1 mb-4 bg-slate-800 rounded p-0.5">
+      <button @click="page='runs'" :class="page==='runs' ? 'bg-slate-700' : ''"
+              class="flex-1 text-xs py-1.5 rounded hover:bg-slate-700">Runs</button>
+      <button @click="page='admin'; loadAdmin()" :class="page==='admin' ? 'bg-slate-700' : ''"
+              class="flex-1 text-xs py-1.5 rounded hover:bg-slate-700">Admin</button>
     </div>
-    <div>
-      <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Runs</h2>
-      <ul class="space-y-1">
-        <template x-for="r in runs" :key="r.run_id">
-          <li>
-            <button @click="selectRun(r.run_id)"
-                    :class="r.run_id===runId ? 'bg-slate-700' : 'hover:bg-slate-800'"
-                    class="w-full text-left px-2 py-1.5 rounded text-xs">
-              <div class="font-mono truncate" x-text="r.run_id"></div>
-              <div class="text-slate-400" x-text="r.project_name + ' · ' + r.status"></div>
-            </button>
-          </li>
-        </template>
-      </ul>
-    </div>
+
+    <template x-if="page==='runs'">
+      <div>
+        <div class="mb-6">
+          <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">New Run</h2>
+          <select x-model="newProject" class="w-full bg-slate-800 text-slate-100 p-2 rounded text-sm mb-2">
+            <option value="">Select project…</option>
+            <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
+          </select>
+          <button @click="createRun()" :disabled="!newProject"
+                  class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 rounded text-sm">
+            Start
+          </button>
+        </div>
+        <div>
+          <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Runs</h2>
+          <ul class="space-y-1">
+            <template x-for="r in runs" :key="r.run_id">
+              <li>
+                <button @click="selectRun(r.run_id)"
+                        :class="r.run_id===runId ? 'bg-slate-700' : 'hover:bg-slate-800'"
+                        class="w-full text-left px-2 py-1.5 rounded text-xs">
+                  <div class="font-mono truncate" x-text="r.run_id"></div>
+                  <div class="text-slate-400" x-text="r.project_name + ' · ' + r.status"></div>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="page==='admin'">
+      <div>
+        <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Sections</h2>
+        <ul class="space-y-1">
+          <template x-for="s in adminSections" :key="s.id">
+            <li>
+              <button @click="selectAdminSection(s.id)"
+                      :class="adminSection===s.id ? 'bg-slate-700' : 'hover:bg-slate-800'"
+                      class="w-full text-left px-2 py-1.5 rounded text-xs">
+                <span x-text="s.label"></span>
+              </button>
+            </li>
+          </template>
+        </ul>
+
+        <div class="mt-6" x-show="adminSection==='project_config'">
+          <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Project</h2>
+          <select x-model="adminProject" @change="loadProjectConfig()"
+                  class="w-full bg-slate-800 text-slate-100 p-2 rounded text-xs">
+            <option value="">— select —</option>
+            <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
+          </select>
+        </div>
+      </div>
+    </template>
   </aside>
 
   <main class="flex-1 flex flex-col overflow-hidden">
 
-    <header class="bg-white border-b px-6 py-3 flex items-center gap-6 shrink-0">
+    <template x-if="page==='runs'">
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white border-b px-6 py-3 flex items-center gap-6 shrink-0">
       <div>
         <div class="text-xs text-slate-500">Run</div>
         <div class="font-mono text-sm" x-text="runId || '—'"></div>
@@ -82,23 +141,37 @@
 
     <div x-show="runId" class="flex-1 grid grid-cols-12 overflow-hidden">
 
-      <section class="col-span-3 border-r overflow-y-auto p-3 bg-white">
-        <h2 class="text-xs uppercase tracking-wider text-slate-500 mb-2">Pipeline</h2>
-        <svg :viewBox="`0 0 200 ${30 + agentNodes.length * 40}`" class="w-full">
-          <template x-for="(n, i) in agentNodes" :key="n">
-            <g :transform="`translate(10, ${10 + i * 40})`" @click="filterNode = (filterNode===n ? null : n); reloadArtifacts()">
-              <rect width="180" height="30" rx="4" class="node-rect"
-                    :fill="nodeFill(n)" :stroke="filterNode===n ? '#1e40af' : '#cbd5e1'"
-                    :stroke-width="filterNode===n ? 2 : 1" />
-              <text x="10" y="19" font-size="12" font-family="ui-monospace, monospace"
-                    :fill="nodeText(n)" x-text="n"></text>
-            </g>
-          </template>
-          <template x-for="i in agentNodes.length - 1" :key="i">
-            <line x1="100" :y1="40 + (i-1) * 40" x2="100" :y2="40 + (i-1) * 40 + 10"
-                  stroke="#94a3b8" stroke-width="1" />
-          </template>
-        </svg>
+      <section class="col-span-5 border-r overflow-y-auto p-3 bg-white">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs uppercase tracking-wider text-slate-500">Pipeline Graph</h2>
+          <div class="flex gap-1">
+            <button @click="resetGraphView()" class="text-[10px] px-2 py-0.5 border rounded hover:bg-slate-50">fit</button>
+            <button x-show="filterNode" @click="filterNode=null; reloadArtifacts(); drawGraph()"
+                    class="text-[10px] px-2 py-0.5 text-blue-600 hover:underline">clear filter</button>
+          </div>
+        </div>
+
+        <div class="relative" style="height: 720px;">
+          <canvas x-ref="graphCanvas" class="graph-canvas w-full h-full"
+                  @mousedown="onCanvasDown($event)"
+                  @mousemove="onCanvasMove($event)"
+                  @mouseup="onCanvasUp($event)"
+                  @mouseleave="onCanvasLeave()"
+                  @click="onCanvasClick($event)"
+                  @wheel.prevent="onCanvasWheel($event)"></canvas>
+          <div x-ref="tooltip" class="graph-tooltip"></div>
+        </div>
+
+        <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px] text-slate-600">
+          <span><span class="legend-dot" style="background:#fde68a"></span>next</span>
+          <span><span class="legend-dot" style="background:#bfdbfe"></span>last</span>
+          <span><span class="legend-dot" style="background:#bbf7d0"></span>finished</span>
+          <span><span class="legend-dot" style="background:#e9d5ff"></span>creative</span>
+          <span><span class="legend-dot" style="background:#fecaca"></span>qa</span>
+          <span><span class="legend-dot" style="background:#bae6fd"></span>orchestrator</span>
+          <span><span class="legend-dot" style="background:#d1fae5"></span>support</span>
+          <span class="ml-auto">— solid: always · ╌ dashed: conditional</span>
+        </div>
 
         <div class="mt-4 pt-3 border-t">
           <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-2">State (raw)</h3>
@@ -177,7 +250,7 @@
         </template>
       </section>
 
-      <section class="col-span-6 overflow-y-auto p-4 bg-white">
+      <section class="col-span-4 overflow-y-auto p-4 bg-white">
         <div x-show="!selected" class="text-slate-400 text-sm">Pick an artifact.</div>
 
         <div x-show="selected" class="space-y-3">
@@ -242,27 +315,581 @@
               Regenerate from <span x-text="filterNode"></span>
             </button>
           </div>
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </div>
+    </template>
+
+    <template x-if="page==='admin'">
+      <div class="flex-1 overflow-auto bg-slate-50">
+        <header class="bg-white border-b px-6 py-3 flex items-center gap-4 shrink-0">
+          <h2 class="text-sm font-semibold">Admin Console</h2>
+          <span class="text-xs text-slate-500" x-text="adminSection.replace('_',' ')"></span>
+          <span x-show="adminSaving" class="text-xs text-amber-600">saving…</span>
+          <span x-show="adminMessage" class="text-xs" :class="adminError ? 'text-red-600' : 'text-emerald-600'" x-text="adminMessage"></span>
+        </header>
+
+        <div class="p-6 max-w-5xl mx-auto">
+
+          <div x-show="adminSection==='env'">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-base font-semibold">Environment Variables</h3>
+                <p class="text-xs text-slate-500" x-text="'.env at ' + (adminEnv.path || '')"></p>
+              </div>
+              <div class="flex gap-2">
+                <button @click="adminRevealAll = !adminRevealAll"
+                        class="text-xs border px-3 py-1.5 rounded hover:bg-white"
+                        x-text="adminRevealAll ? 'Hide secrets' : 'Reveal secrets'"></button>
+                <button @click="addEnvRow()" class="text-xs border px-3 py-1.5 rounded hover:bg-white">+ add</button>
+                <button @click="saveEnv()" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-500">Save</button>
+              </div>
+            </div>
+
+            <div class="bg-white border rounded">
+              <template x-for="(item, i) in adminEnv.items" :key="i">
+                <div class="flex items-center gap-2 p-2 border-b last:border-b-0">
+                  <input x-model="item.key" placeholder="KEY"
+                         class="font-mono text-xs px-2 py-1.5 border rounded w-64" />
+                  <input :type="(item.secret && !item._reveal && !adminRevealAll) ? 'password' : 'text'"
+                         x-model="item.value" placeholder="value"
+                         class="font-mono text-xs px-2 py-1.5 border rounded flex-1" />
+                  <button @click="item._reveal = !item._reveal" x-show="item.secret"
+                          class="text-[10px] text-slate-500 hover:text-slate-800 px-1"
+                          x-text="(item._reveal || adminRevealAll) ? 'hide' : 'show'"></button>
+                  <button @click="adminEnv.items.splice(i,1)" class="text-red-500 hover:text-red-700 text-xs px-2">×</button>
+                </div>
+              </template>
+              <div x-show="!(adminEnv.items||[]).length" class="p-4 text-xs text-slate-400 text-center">No env vars. Click + add.</div>
+            </div>
+
+            <p class="text-[11px] text-slate-500 mt-3">
+              Masked values (with <code>*</code>) are kept as-is on save. Edit a field to change it.
+              Values are referenced from <code>config.yaml</code> via <code>ENV:VAR_NAME</code>.
+            </p>
+          </div>
+
+          <div x-show="adminSection==='root_config' || adminSection==='project_config'">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-base font-semibold">
+                  <span x-show="adminSection==='root_config'">Root config.yaml</span>
+                  <span x-show="adminSection==='project_config'">Project config.yaml</span>
+                </h3>
+                <p class="text-xs text-slate-500" x-text="adminConfig.path || (adminSection==='project_config' ? 'Select a project in sidebar' : '')"></p>
+              </div>
+              <div class="flex gap-2">
+                <div class="flex bg-slate-200 rounded p-0.5 text-xs">
+                  <button @click="adminEditMode='form'" :class="adminEditMode==='form' ? 'bg-white shadow' : ''"
+                          class="px-3 py-1 rounded">Form</button>
+                  <button @click="adminEditMode='raw'" :class="adminEditMode==='raw' ? 'bg-white shadow' : ''"
+                          class="px-3 py-1 rounded">YAML</button>
+                </div>
+                <button @click="reloadAdminConfig()" class="text-xs border px-3 py-1.5 rounded hover:bg-white">Reload</button>
+                <button @click="saveConfig()" :disabled="!adminConfig.path"
+                        class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-500 disabled:opacity-40">Save</button>
+              </div>
+            </div>
+
+            <div x-show="adminSection==='project_config' && !adminProject"
+                 class="bg-amber-50 border border-amber-200 rounded p-4 text-xs text-amber-800">
+              Select a project in the sidebar to load its config.
+            </div>
+
+            <div x-show="adminConfig.path && adminEditMode==='raw'">
+              <textarea x-model="adminConfig.raw" spellcheck="false"
+                        class="editor w-full h-[70vh] border rounded p-3 bg-white text-xs"></textarea>
+              <p class="text-[11px] text-slate-500 mt-2">Raw YAML — saved as-is. Validated before write.</p>
+            </div>
+
+            <div x-show="adminConfig.path && adminEditMode==='form'" class="space-y-6">
+
+              <section class="bg-white border rounded p-4">
+                <h4 class="text-sm font-semibold mb-3">Models</h4>
+                <p class="text-[11px] text-slate-500 mb-3">
+                  Define provider connections. Use <code>ENV:VAR_NAME</code> to reference an env var, or paste a literal key.
+                  Existing literal keys are masked — saving with the mask preserves the original.
+                </p>
+                <div class="space-y-3">
+                  <template x-for="(m, name) in (adminConfig.data?.models || {})" :key="name">
+                    <div class="border rounded p-3 bg-slate-50">
+                      <div class="flex items-center gap-2 mb-2">
+                        <input :value="name" @change="renameModel(name, $event.target.value)"
+                               class="font-mono text-xs font-semibold px-2 py-1 border rounded w-48 bg-white" />
+                        <select x-model="m.provider" class="text-xs px-2 py-1 border rounded bg-white">
+                          <option value="gemini">gemini</option>
+                          <option value="openai">openai</option>
+                          <option value="kling">kling</option>
+                          <option value="minimax">minimax</option>
+                          <option value="veo">veo</option>
+                        </select>
+                        <input x-model="m.model" placeholder="model id"
+                               class="text-xs px-2 py-1 border rounded flex-1 bg-white" />
+                        <button @click="delete adminConfig.data.models[name]" class="text-red-500 text-xs px-2">×</button>
+                      </div>
+                      <div class="grid grid-cols-2 gap-2">
+                        <label class="text-[11px] text-slate-600">
+                          api_key
+                          <input x-model="m.api_key" class="mt-0.5 font-mono text-xs px-2 py-1 border rounded w-full bg-white" />
+                        </label>
+                        <label class="text-[11px] text-slate-600" x-show="m.provider==='kling'">
+                          secret_key
+                          <input x-model="m.secret_key" class="mt-0.5 font-mono text-xs px-2 py-1 border rounded w-full bg-white" />
+                        </label>
+                        <label class="text-[11px] text-slate-600" x-show="m.provider==='openai'">
+                          base_url
+                          <input x-model="m.base_url" class="mt-0.5 font-mono text-xs px-2 py-1 border rounded w-full bg-white" />
+                        </label>
+                        <label class="text-[11px] text-slate-600">
+                          temperature
+                          <input type="number" step="0.05" x-model.number="m.temperature"
+                                 class="mt-0.5 font-mono text-xs px-2 py-1 border rounded w-full bg-white" />
+                        </label>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+                <button @click="addModel()" class="mt-3 text-xs border px-3 py-1.5 rounded hover:bg-slate-50">+ add model</button>
+              </section>
+
+              <section class="bg-white border rounded p-4">
+                <h4 class="text-sm font-semibold mb-3">Per-Agent Assignments</h4>
+                <table class="w-full text-xs">
+                  <thead class="text-slate-500 text-left">
+                    <tr><th class="py-1">Agent</th><th>LLM</th><th>Image</th><th>Video</th></tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="agent in (adminConfig.agent_nodes || [])" :key="agent">
+                      <tr class="border-t">
+                        <td class="py-1.5 font-mono" x-text="agent"></td>
+                        <td><select :value="(adminConfig.data?.agents?.[agent]?.llm) || ''"
+                                    @change="setAgentField(agent, 'llm', $event.target.value)"
+                                    class="text-xs px-2 py-0.5 border rounded bg-white w-full">
+                              <option value="">—</option>
+                              <template x-for="mn in modelNames()" :key="mn"><option :value="mn" x-text="mn"></option></template>
+                            </select></td>
+                        <td><select :value="(adminConfig.data?.agents?.[agent]?.image) || ''"
+                                    @change="setAgentField(agent, 'image', $event.target.value)"
+                                    class="text-xs px-2 py-0.5 border rounded bg-white w-full">
+                              <option value="">—</option>
+                              <template x-for="mn in modelNames()" :key="mn"><option :value="mn" x-text="mn"></option></template>
+                            </select></td>
+                        <td><select :value="(adminConfig.data?.agents?.[agent]?.video) || ''"
+                                    @change="setAgentField(agent, 'video', $event.target.value)"
+                                    class="text-xs px-2 py-0.5 border rounded bg-white w-full">
+                              <option value="">—</option>
+                              <template x-for="mn in modelNames()" :key="mn"><option :value="mn" x-text="mn"></option></template>
+                            </select></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </section>
+
+              <section class="bg-white border rounded p-4" x-show="adminConfig.data?.video">
+                <h4 class="text-sm font-semibold mb-3">General</h4>
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                  <label>video.style
+                    <input x-model="adminConfig.data.video.style" class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                  <label>video.resolution
+                    <input x-model="adminConfig.data.video.resolution" class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                  <label>video.fps
+                    <input type="number" x-model.number="adminConfig.data.video.fps" class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                  <label>video.aspect_ratio
+                    <input x-model="adminConfig.data.video.aspect_ratio" class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                  <label>generation.project_budget_usd
+                    <input type="number" step="0.01" x-model.number="adminConfig.data.generation.project_budget_usd"
+                           class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                  <label>generation.max_retries_per_shot
+                    <input type="number" x-model.number="adminConfig.data.generation.max_retries_per_shot"
+                           class="mt-0.5 px-2 py-1 border rounded w-full" />
+                  </label>
+                </div>
+              </section>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </template>
+
   </main>
 </div>
 
 <script>
 function inspector() {
   return {
+    page: 'runs',
     projects: [], runs: [], runId: null, newProject: '',
     snapshot: {}, events: [], ws: null,
     agentNodes: [], finishedNodes: new Set(),
     artifacts: {}, filterNode: null,
     selected: null, textContent: '', editing: false,
 
+    adminSection: 'env',
+    adminSections: [
+      { id: 'env', label: 'Environment Variables' },
+      { id: 'root_config', label: 'Root config.yaml' },
+      { id: 'project_config', label: 'Project config.yaml' },
+    ],
+    adminEnv: { path: '', items: [] },
+    adminConfig: { path: '', exists: false, raw: '', data: { video:{}, generation:{}, models:{}, agents:{} }, agent_nodes: [] },
+    adminProject: '',
+    adminEditMode: 'form',
+    adminRevealAll: false,
+    adminSaving: false,
+    adminMessage: '',
+    adminError: false,
+
+    graphData: { nodes: [], edges: [] },
+    nodeLayout: {},
+    view: { offsetX: 0, offsetY: 0, scale: 1 },
+    drag: { active: false, startX: 0, startY: 0, baseX: 0, baseY: 0, moved: false },
+    hoverNode: null,
+
     async init() {
       const meta = await fetch('/api/meta').then(r => r.json());
       this.agentNodes = meta.agent_nodes || [];
+      this.graphData = await fetch('/api/graph').then(r => r.json()).catch(() => ({nodes:[],edges:[]}));
+      this.layoutGraph();
       this.projects = await fetch('/api/projects').then(r => r.json());
       await this.loadRuns();
+      this.$nextTick(() => {
+        this.fitGraph();
+        this.drawGraph();
+        window.addEventListener('resize', () => { this.fitGraph(); this.drawGraph(); });
+      });
     },
+
+    layoutGraph() {
+      const grid = [
+        [null, '__start__', null],
+        [null, 'screenwriter', null],
+        [null, 'showrunner', '__end__'],
+        [null, 'director', null],
+        [null, 'script_coordinator', 'editor'],
+        [null, 'production_designer', null],
+        [null, 'design_qa', null],
+        [null, 'cinematographer', null],
+        [null, 'storyboard_qa', null],
+        [null, 'continuity_supervisor', null],
+        [null, 'lead_animator', null],
+      ];
+      const COL_W = 200, ROW_H = 64, NODE_W = 170, NODE_H = 48, PAD = 20;
+      const layout = {};
+      const knownIds = new Set(this.graphData.nodes.map(n => n.id));
+      const placed = new Set();
+      grid.forEach((row, ri) => {
+        row.forEach((id, ci) => {
+          if (!id || !knownIds.has(id)) return;
+          layout[id] = {
+            x: PAD + ci * COL_W,
+            y: PAD + ri * ROW_H,
+            w: NODE_W, h: NODE_H,
+          };
+          placed.add(id);
+        });
+      });
+      let extra = 0;
+      this.graphData.nodes.forEach(n => {
+        if (!placed.has(n.id)) {
+          layout[n.id] = { x: PAD + 3 * COL_W, y: PAD + extra * ROW_H, w: NODE_W, h: NODE_H };
+          extra++;
+        }
+      });
+      this.nodeLayout = layout;
+    },
+
+    fitGraph() {
+      const canvas = this.$refs.graphCanvas;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const xs = Object.values(this.nodeLayout).map(n => n.x + n.w);
+      const ys = Object.values(this.nodeLayout).map(n => n.y + n.h);
+      const contentW = Math.max(...xs, 1) + 20;
+      const contentH = Math.max(...ys, 1) + 20;
+      const scale = Math.min(rect.width / contentW, rect.height / contentH, 1);
+      this.view.scale = scale;
+      this.view.offsetX = (rect.width - contentW * scale) / 2;
+      this.view.offsetY = (rect.height - contentH * scale) / 2;
+    },
+
+    resetGraphView() { this.fitGraph(); this.drawGraph(); },
+
+    roleColor(role) {
+      return ({
+        creative: '#e9d5ff',
+        qa: '#fecaca',
+        orchestrator: '#bae6fd',
+        support: '#d1fae5',
+        terminal: '#e2e8f0',
+      })[role] || '#f1f5f9';
+    },
+
+    nodeStateColor(id) {
+      const next = (this.snapshot.next || []);
+      if (next.includes(id)) return '#fde68a';
+      if (this.snapshot.last_node === id) return '#bfdbfe';
+      if (this.finishedNodes.has(id)) return '#bbf7d0';
+      return null;
+    },
+
+    edgeAnchor(from, to) {
+      const sameCol = Math.abs((from.x + from.w / 2) - (to.x + to.w / 2)) < 5;
+      const forward = to.y > from.y;
+      if (sameCol && forward) {
+        return {
+          x1: from.x + from.w / 2, y1: from.y + from.h,
+          x2: to.x + to.w / 2,     y2: to.y,
+          kind: 'down',
+        };
+      }
+      if (forward && to.x !== from.x) {
+        const fromRight = to.x > from.x;
+        return {
+          x1: fromRight ? from.x + from.w : from.x,
+          y1: from.y + from.h / 2,
+          x2: fromRight ? to.x : to.x + to.w,
+          y2: to.y + to.h / 2,
+          kind: 'side',
+        };
+      }
+      const goRight = (from.x + from.w / 2) >= 200;
+      return {
+        x1: goRight ? from.x + from.w : from.x,
+        y1: from.y + from.h / 2,
+        x2: goRight ? to.x + to.w : to.x,
+        y2: to.y + to.h / 2,
+        kind: 'loop',
+        goRight,
+      };
+    },
+
+    drawGraph() {
+      const canvas = this.$refs.graphCanvas;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      ctx.save();
+      ctx.translate(this.view.offsetX, this.view.offsetY);
+      ctx.scale(this.view.scale, this.view.scale);
+
+      const nextSet = new Set(this.snapshot.next || []);
+      const last = this.snapshot.last_node;
+
+      this.graphData.edges.forEach(e => {
+        const from = this.nodeLayout[e.source];
+        const to = this.nodeLayout[e.target];
+        if (!from || !to) return;
+        const a = this.edgeAnchor(from, to);
+        const active = (last === e.source && nextSet.has(e.target)) ||
+                       (this.finishedNodes.has(e.source) && this.finishedNodes.has(e.target));
+        ctx.strokeStyle = active ? '#2563eb' : '#94a3b8';
+        ctx.lineWidth = active ? 2 : 1.2;
+        ctx.setLineDash(e.conditional ? [5, 4] : []);
+        ctx.beginPath();
+
+        let labelX, labelY;
+        if (a.kind === 'down') {
+          ctx.moveTo(a.x1, a.y1);
+          ctx.lineTo(a.x2, a.y2);
+          labelX = a.x1 + 8; labelY = (a.y1 + a.y2) / 2;
+        } else if (a.kind === 'side') {
+          const midX = (a.x1 + a.x2) / 2;
+          ctx.moveTo(a.x1, a.y1);
+          ctx.bezierCurveTo(midX, a.y1, midX, a.y2, a.x2, a.y2);
+          labelX = midX; labelY = (a.y1 + a.y2) / 2 - 6;
+        } else {
+          const off = a.goRight ? 60 : -60;
+          ctx.moveTo(a.x1, a.y1);
+          ctx.bezierCurveTo(a.x1 + off, a.y1, a.x2 + off, a.y2, a.x2, a.y2);
+          labelX = a.x1 + off; labelY = (a.y1 + a.y2) / 2;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        this.drawArrowhead(ctx, a, active);
+
+        if (e.label) {
+          ctx.font = '10px ui-monospace, monospace';
+          const tw = ctx.measureText(e.label).width;
+          ctx.fillStyle = 'rgba(255,255,255,.92)';
+          ctx.fillRect(labelX - tw / 2 - 3, labelY - 7, tw + 6, 12);
+          ctx.fillStyle = active ? '#1d4ed8' : '#475569';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(e.label, labelX, labelY);
+        }
+      });
+
+      this.graphData.nodes.forEach(n => {
+        const pos = this.nodeLayout[n.id];
+        if (!pos) return;
+        const stateFill = this.nodeStateColor(n.id);
+        const fill = stateFill || this.roleColor(n.role);
+        const isFiltered = this.filterNode === n.id;
+        const isHover = this.hoverNode === n.id;
+
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = isFiltered ? '#1e40af' : (isHover ? '#475569' : '#cbd5e1');
+        ctx.lineWidth = isFiltered ? 2.5 : (isHover ? 1.8 : 1);
+        this.roundRect(ctx, pos.x, pos.y, pos.w, pos.h, 6);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '600 12px ui-sans-serif, system-ui';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(n.label, pos.x + 10, pos.y + pos.h / 2 - 7);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillText(n.id, pos.x + 10, pos.y + pos.h / 2 + 8);
+
+        if (nextSet.has(n.id)) {
+          ctx.fillStyle = '#d97706';
+          ctx.beginPath();
+          ctx.arc(pos.x + pos.w - 8, pos.y + 8, 4, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (last === n.id) {
+          ctx.fillStyle = '#2563eb';
+          ctx.beginPath();
+          ctx.arc(pos.x + pos.w - 8, pos.y + 8, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      ctx.restore();
+    },
+
+    drawArrowhead(ctx, a, active) {
+      const size = 7;
+      let angle;
+      if (a.kind === 'down') {
+        angle = Math.PI / 2;
+      } else if (a.kind === 'side') {
+        angle = a.x2 > a.x1 ? 0 : Math.PI;
+      } else {
+        angle = a.goRight ? Math.PI : 0;
+      }
+      ctx.save();
+      ctx.translate(a.x2, a.y2);
+      ctx.rotate(angle);
+      ctx.fillStyle = active ? '#2563eb' : '#64748b';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-size, -size / 2);
+      ctx.lineTo(-size, size / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    },
+
+    roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    },
+
+    canvasToWorld(ev) {
+      const rect = this.$refs.graphCanvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left - this.view.offsetX) / this.view.scale;
+      const y = (ev.clientY - rect.top - this.view.offsetY) / this.view.scale;
+      return { x, y, sx: ev.clientX - rect.left, sy: ev.clientY - rect.top };
+    },
+
+    nodeAt(wx, wy) {
+      for (const n of this.graphData.nodes) {
+        const p = this.nodeLayout[n.id];
+        if (!p) continue;
+        if (wx >= p.x && wx <= p.x + p.w && wy >= p.y && wy <= p.y + p.h) return n;
+      }
+      return null;
+    },
+
+    onCanvasDown(ev) {
+      this.drag.active = true;
+      this.drag.moved = false;
+      this.drag.startX = ev.clientX; this.drag.startY = ev.clientY;
+      this.drag.baseX = this.view.offsetX; this.drag.baseY = this.view.offsetY;
+    },
+    onCanvasMove(ev) {
+      const w = this.canvasToWorld(ev);
+      if (this.drag.active) {
+        const dx = ev.clientX - this.drag.startX, dy = ev.clientY - this.drag.startY;
+        if (Math.abs(dx) + Math.abs(dy) > 3) this.drag.moved = true;
+        this.view.offsetX = this.drag.baseX + dx;
+        this.view.offsetY = this.drag.baseY + dy;
+        this.drawGraph();
+        return;
+      }
+      const node = this.nodeAt(w.x, w.y);
+      if (node !== this.hoverNode) {
+        this.hoverNode = node;
+        this.drawGraph();
+      }
+      const tip = this.$refs.tooltip;
+      if (node) {
+        const incoming = this.graphData.edges.filter(e => e.target === node.id);
+        const outgoing = this.graphData.edges.filter(e => e.source === node.id);
+        const status = (this.snapshot.next || []).includes(node.id) ? 'NEXT'
+          : this.snapshot.last_node === node.id ? 'LAST'
+          : this.finishedNodes.has(node.id) ? 'finished' : 'idle';
+        tip.innerHTML = `<div style="font-weight:600;margin-bottom:2px;">${node.label}</div>`
+          + `<div style="opacity:.7;">${node.id} · ${node.role} · ${status}</div>`
+          + (incoming.length ? `<div style="margin-top:4px;opacity:.8;">in: ${incoming.map(e=>e.source).join(', ')}</div>` : '')
+          + (outgoing.length ? `<div style="opacity:.8;">out: ${outgoing.map(e=>e.target+(e.label?` (${e.label})`:'')).join(', ')}</div>` : '');
+        tip.style.left = (w.sx + 12) + 'px';
+        tip.style.top = (w.sy + 12) + 'px';
+        tip.classList.add('show');
+      } else {
+        tip.classList.remove('show');
+      }
+    },
+    onCanvasUp() { this.drag.active = false; },
+    onCanvasLeave() {
+      this.drag.active = false;
+      this.hoverNode = null;
+      this.$refs.tooltip.classList.remove('show');
+      this.drawGraph();
+    },
+    onCanvasClick(ev) {
+      if (this.drag.moved) return;
+      const w = this.canvasToWorld(ev);
+      const node = this.nodeAt(w.x, w.y);
+      if (!node || node.id === '__start__' || node.id === '__end__') return;
+      this.filterNode = (this.filterNode === node.id) ? null : node.id;
+      this.reloadArtifacts();
+      this.drawGraph();
+    },
+    onCanvasWheel(ev) {
+      const w = this.canvasToWorld(ev);
+      const factor = ev.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newScale = Math.min(2.5, Math.max(0.3, this.view.scale * factor));
+      this.view.offsetX -= (w.x) * (newScale - this.view.scale);
+      this.view.offsetY -= (w.y) * (newScale - this.view.scale);
+      this.view.scale = newScale;
+      this.drawGraph();
+    },
+
     async loadRuns() {
       this.runs = await fetch('/api/runs').then(r => r.json());
     },
@@ -282,11 +909,13 @@ function inspector() {
       await this.refresh();
       await this.reloadArtifacts();
       this.openSocket();
+      this.$nextTick(() => { this.fitGraph(); this.drawGraph(); });
     },
     async refresh() {
       if (!this.runId) return;
       this.snapshot = await fetch('/api/runs/' + this.runId).then(r => r.json());
       await this.loadRuns();
+      this.drawGraph();
     },
     async reloadArtifacts() {
       if (!this.runId) return;
@@ -299,13 +928,14 @@ function inspector() {
       this.ws = new WebSocket(`${proto}://${location.host}/api/ws/${this.runId}`);
       this.ws.onmessage = (m) => {
         const ev = JSON.parse(m.data);
-        if (ev.type === 'snapshot') { this.snapshot = ev.data; return; }
+        if (ev.type === 'snapshot') { this.snapshot = ev.data; this.drawGraph(); return; }
         this.events.unshift(ev);
         if (ev.type === 'node_finished' && ev.node) this.finishedNodes.add(ev.node);
         if (['run_paused','run_completed','run_error','node_finished'].includes(ev.type)) {
           this.refresh();
           if (ev.type !== 'node_finished') this.reloadArtifacts();
         }
+        this.drawGraph();
       };
     },
     async resume() {
@@ -348,16 +978,6 @@ function inspector() {
     hasArtifacts(items) {
       return Array.isArray(items) && items.length > 0;
     },
-    nodeFill(n) {
-      const next = (this.snapshot.next || []);
-      if (next.includes(n)) return '#fde68a';
-      if (this.snapshot.last_node === n) return '#bfdbfe';
-      if (this.finishedNodes.has(n)) return '#bbf7d0';
-      return '#f1f5f9';
-    },
-    nodeText(n) {
-      return ((this.snapshot.next || []).includes(n) || this.snapshot.last_node === n) ? '#0f172a' : '#475569';
-    },
     statusColor() {
       return ({running:'text-blue-600', paused:'text-amber-600',
                completed:'text-emerald-600', error:'text-red-600'})[this.snapshot.status] || 'text-slate-600';
@@ -369,6 +989,126 @@ function inspector() {
     renderMarkdown(s) {
       try { return window.marked ? marked.parse(s || '') : (s || ''); }
       catch(e) { return s || ''; }
+    },
+
+    async loadAdmin() {
+      if (!this.projects.length) {
+        this.projects = await fetch('/api/projects').then(r => r.json());
+      }
+      await this.loadEnv();
+      await this.loadRootConfig();
+    },
+    async selectAdminSection(id) {
+      this.adminSection = id;
+      this.adminMessage = '';
+      this.adminError = '';
+      if (id === 'env') await this.loadEnv();
+      else if (id === 'root_config') await this.loadRootConfig();
+      else if (id === 'project_config') await this.loadProjectConfig();
+    },
+    async loadEnv() {
+      this.adminEnv = await fetch('/api/admin/env').then(r => r.json());
+      this.adminEnv.items = (this.adminEnv.items || []).map(it => ({ ...it, _reveal: false }));
+    },
+    addEnvRow() {
+      this.adminEnv.items = this.adminEnv.items || [];
+      this.adminEnv.items.push({ key: '', value: '', secret: false, _reveal: true });
+    },
+    async saveEnv() {
+      this.adminSaving = true; this.adminMessage = ''; this.adminError = false;
+      try {
+        const r = await fetch('/api/admin/env', {
+          method: 'PUT', headers: {'content-type':'application/json'},
+          body: JSON.stringify({ items: this.adminEnv.items.map(({key,value}) => ({key,value})) })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        this.adminMessage = 'env saved (' + (await r.json()).count + ' vars)';
+        await this.loadEnv();
+      } catch (e) {
+        this.adminError = true; this.adminMessage = 'save failed: ' + e.message;
+      } finally {
+        this.adminSaving = false;
+        setTimeout(() => { this.adminMessage = ''; }, 4000);
+      }
+    },
+
+    async loadRootConfig() {
+      const r = await fetch('/api/admin/config').then(r => r.json());
+      r.data = r.data || {};
+      r.data.video = r.data.video || {};
+      r.data.generation = r.data.generation || {};
+      r.data.models = r.data.models || {};
+      r.data.agents = r.data.agents || {};
+      this.adminConfig = r;
+    },
+    async loadProjectConfig() {
+      if (!this.adminProject) {
+        this.adminConfig = { path:'', data:{ video:{}, generation:{}, models:{}, agents:{} }, raw:'', agent_nodes:[] };
+        return;
+      }
+      const r = await fetch('/api/admin/config?project=' + encodeURIComponent(this.adminProject)).then(r => r.json());
+      r.data = r.data || {};
+      r.data.video = r.data.video || {};
+      r.data.generation = r.data.generation || {};
+      r.data.models = r.data.models || {};
+      r.data.agents = r.data.agents || {};
+      this.adminConfig = r;
+    },
+    _normalizeAdminConfig() {
+      const d = this.adminConfig.data = this.adminConfig.data || {};
+      d.video = d.video || {};
+      d.generation = d.generation || {};
+      d.models = d.models || {};
+      d.agents = d.agents || {};
+    },
+    async reloadAdminConfig() {
+      if (this.adminSection === 'project_config') await this.loadProjectConfig();
+      else await this.loadRootConfig();
+    },
+    modelNames() { return Object.keys(this.adminConfig.data?.models || {}); },
+    addModel() {
+      const name = prompt('Model name (e.g. gemini-flash):');
+      if (!name) return;
+      this.adminConfig.data.models[name] = { provider: 'gemini', model: '', api_key: '', temperature: 0.2 };
+    },
+    renameModel(oldName, newName) {
+      newName = (newName || '').trim();
+      if (!newName || newName === oldName) return;
+      const models = this.adminConfig.data.models;
+      if (models[newName]) { alert('Name already exists'); return; }
+      models[newName] = models[oldName]; delete models[oldName];
+      Object.values(this.adminConfig.data.agents || {}).forEach(a => {
+        ['llm','image','video'].forEach(k => { if (a[k] === oldName) a[k] = newName; });
+      });
+    },
+    setAgentField(agent, field, value) {
+      const agents = this.adminConfig.data.agents = this.adminConfig.data.agents || {};
+      const cur = agents[agent] = agents[agent] || {};
+      if (value) cur[field] = value;
+      else delete cur[field];
+      if (!Object.keys(cur).length) delete agents[agent];
+    },
+    async saveConfig() {
+      this.adminSaving = true; this.adminMessage = ''; this.adminError = false;
+      try {
+        const url = '/api/admin/config' + (this.adminSection === 'project_config' && this.adminProject
+          ? '?project=' + encodeURIComponent(this.adminProject) : '');
+        const body = this.adminEditMode === 'raw'
+          ? { raw: this.adminConfig.raw }
+          : { data: this.adminConfig.data };
+        const r = await fetch(url, {
+          method: 'PUT', headers: {'content-type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+        this.adminMessage = 'config saved';
+        await this.reloadAdminConfig();
+      } catch (e) {
+        this.adminError = true; this.adminMessage = 'save failed: ' + e.message;
+      } finally {
+        this.adminSaving = false;
+        setTimeout(() => { this.adminMessage = ''; }, 4000);
+      }
     },
   };
 }

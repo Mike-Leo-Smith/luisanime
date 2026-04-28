@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,9 +10,11 @@ from pydantic import BaseModel
 from src.pipeline.graph import AGENT_NODES
 from src.server.runner import RunManager
 from src.server.artifacts import discover, kind_for, safe_resolve, EDITABLE_EXTS
+from src.server import admin as admin_mod
 
 
 WEB_DIR = Path(__file__).parent / "web"
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class CreateRunReq(BaseModel):
@@ -30,6 +33,15 @@ class WriteFileReq(BaseModel):
 class RegenerateReq(BaseModel):
     node: str
     state_patch: Optional[Dict[str, Any]] = None
+
+
+class EnvWriteReq(BaseModel):
+    items: List[Dict[str, Any]]
+
+
+class ConfigWriteReq(BaseModel):
+    data: Optional[Dict[str, Any]] = None
+    raw: Optional[str] = None
 
 
 def create_app(projects_dir: str = "./projects") -> FastAPI:
@@ -51,6 +63,62 @@ def create_app(projects_dir: str = "./projects") -> FastAPI:
     @api.get("/api/meta")
     async def meta():
         return {"agent_nodes": AGENT_NODES}
+
+    @api.get("/api/graph")
+    async def graph_topology():
+        from src.pipeline.graph import workflow
+
+        compiled = workflow.compile()
+        g = compiled.get_graph()
+
+        roles = {
+            "screenwriter": ("Screenwriter", "creative"),
+            "showrunner": ("Showrunner", "orchestrator"),
+            "director": ("Director", "creative"),
+            "script_coordinator": ("Script Coordinator", "support"),
+            "production_designer": ("Production Designer", "creative"),
+            "design_qa": ("Design QA", "qa"),
+            "cinematographer": ("Cinematographer", "creative"),
+            "storyboard_qa": ("Storyboard QA", "qa"),
+            "continuity_supervisor": ("Continuity Supervisor", "qa"),
+            "lead_animator": ("Lead Animator", "creative"),
+            "editor": ("Editor", "support"),
+        }
+
+        edge_labels = {
+            ("showrunner", "director"): "scenes remain",
+            ("showrunner", "__end__"): "done / escalation",
+            ("script_coordinator", "production_designer"): "more shots",
+            ("script_coordinator", "editor"): "scene complete",
+            ("design_qa", "cinematographer"): "approved",
+            ("design_qa", "production_designer"): "rejected (retry)",
+            ("storyboard_qa", "continuity_supervisor"): "approved + keyframe",
+            ("storyboard_qa", "cinematographer"): "rejected / need keyframe",
+            ("continuity_supervisor", "lead_animator"): "keyframe ok / re-render",
+            ("continuity_supervisor", "script_coordinator"): "render approved",
+            ("continuity_supervisor", "cinematographer"): "keyframe rejected",
+            ("continuity_supervisor", "director"): "circuit breaker",
+        }
+
+        nodes = []
+        for nid in g.nodes.keys():
+            label, role = roles.get(nid, (nid, "system"))
+            if nid == "__start__":
+                label, role = "START", "terminal"
+            elif nid == "__end__":
+                label, role = "END", "terminal"
+            nodes.append({"id": nid, "label": label, "role": role})
+
+        edges = []
+        for e in g.edges:
+            edges.append({
+                "source": e.source,
+                "target": e.target,
+                "conditional": bool(e.conditional),
+                "label": edge_labels.get((e.source, e.target), ""),
+            })
+
+        return {"nodes": nodes, "edges": edges}
 
     @api.get("/api/projects")
     async def list_projects():
@@ -166,6 +234,58 @@ def create_app(projects_dir: str = "./projects") -> FastAPI:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(req.content, encoding="utf-8")
         return {"ok": True, "bytes": len(req.content)}
+
+    @api.get("/api/admin/env")
+    async def admin_env_get():
+        env_path = ROOT_DIR / ".env"
+        return {"path": str(env_path), "items": admin_mod.parse_env_file(env_path)}
+
+    @api.put("/api/admin/env")
+    async def admin_env_put(req: EnvWriteReq):
+        env_path = ROOT_DIR / ".env"
+        existing = admin_mod.parse_env_file(env_path, reveal=True)
+        admin_mod.write_env_file(env_path, req.items, existing)
+        return {"ok": True, "count": len(req.items)}
+
+    @api.get("/api/admin/config")
+    async def admin_config_get(project: Optional[str] = None):
+        if project:
+            cfg_path = Path(projects_dir) / project / "config.yaml"
+            if not cfg_path.exists():
+                raise HTTPException(404, f"No config.yaml for project '{project}'")
+        else:
+            cfg_path = ROOT_DIR / "config.yaml"
+            if not cfg_path.exists():
+                tmpl = ROOT_DIR / "config.yaml.template"
+                if tmpl.exists():
+                    cfg_path = tmpl
+        data, raw = admin_mod.load_config_file(cfg_path)
+        return {
+            "path": str(cfg_path),
+            "exists": cfg_path.exists(),
+            "raw": raw,
+            "data": admin_mod.mask_config_secrets(data),
+            "agent_nodes": AGENT_NODES,
+        }
+
+    @api.put("/api/admin/config")
+    async def admin_config_put(req: ConfigWriteReq, project: Optional[str] = None):
+        if project:
+            cfg_path = Path(projects_dir) / project / "config.yaml"
+        else:
+            cfg_path = ROOT_DIR / "config.yaml"
+        if req.raw is not None:
+            try:
+                admin_mod.save_config_raw(cfg_path, req.raw)
+            except yaml.YAMLError as e:
+                raise HTTPException(400, f"Invalid YAML: {e}")
+            return {"ok": True, "mode": "raw", "path": str(cfg_path)}
+        if req.data is None:
+            raise HTTPException(400, "Provide either 'raw' or 'data'")
+        old, _ = admin_mod.load_config_file(cfg_path)
+        merged = admin_mod.unmask_config(req.data, old)
+        admin_mod.save_config_file(cfg_path, merged)
+        return {"ok": True, "mode": "data", "path": str(cfg_path)}
 
     @api.websocket("/api/ws/{run_id}")
     async def ws(websocket: WebSocket, run_id: str):
