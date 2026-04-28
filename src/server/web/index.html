@@ -56,8 +56,12 @@
             <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
           </select>
           <button @click="createRun()" :disabled="!newProject"
-                  class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 rounded text-sm">
+                  class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 rounded text-sm mb-2">
             Start
+          </button>
+          <button @click="openNewProject()"
+                  class="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm">
+            + New Project
           </button>
         </div>
         <div>
@@ -96,10 +100,14 @@
         <div class="mt-6" x-show="adminSection==='project_config'">
           <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Project</h2>
           <select x-model="adminProject" @change="loadProjectConfig()"
-                  class="w-full bg-slate-800 text-slate-100 p-2 rounded text-xs">
+                  class="w-full bg-slate-800 text-slate-100 p-2 rounded text-xs mb-2">
             <option value="">— select —</option>
             <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
           </select>
+          <button @click="openNewProject()"
+                  class="w-full bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs">
+            + New Project
+          </button>
         </div>
       </div>
     </template>
@@ -523,11 +531,69 @@
   </main>
 </div>
 
+<div x-show="newProjectOpen" x-cloak
+     class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+     @keydown.escape.window="newProjectOpen=false">
+  <div class="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-lg p-5 shadow-xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">New Project</h3>
+      <button @click="newProjectOpen=false" class="text-slate-400 hover:text-slate-100">✕</button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1">Name</label>
+        <input x-model="newProjectName" type="text" placeholder="my_project"
+               class="w-full bg-slate-800 text-slate-100 p-2 rounded text-sm font-mono"
+               @keydown.enter="submitNewProject()">
+        <p class="text-xs text-slate-500 mt-1">Lowercase letters, numbers, underscores. No slashes.</p>
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1">
+          Novel text <span class="text-slate-500 normal-case tracking-normal">(optional, can paste later)</span>
+        </label>
+
+        <div @dragover.prevent="newProjectDragOver=true"
+             @dragleave.prevent="newProjectDragOver=false"
+             @drop.prevent="handleNovelDrop($event)"
+             :class="newProjectDragOver ? 'border-emerald-400 bg-slate-800' : 'border-slate-700 bg-slate-800/50'"
+             class="border-2 border-dashed rounded p-3 mb-2 text-center transition-colors">
+          <p class="text-xs text-slate-400">
+            Drop a <code>.txt</code> / <code>.md</code> file here, or
+            <button type="button" @click="$refs.novelFile.click()"
+                    class="text-emerald-400 hover:text-emerald-300 underline">browse</button>
+          </p>
+          <p class="text-xs text-slate-500 mt-1" x-show="newProjectFileName"
+             x-text="'Loaded: ' + newProjectFileName + ' (' + newProjectNovel.length.toLocaleString() + ' chars)'"></p>
+          <input type="file" x-ref="novelFile" class="hidden"
+                 accept=".txt,.md,.markdown,text/plain,text/markdown"
+                 @change="handleNovelFile($event.target.files[0])">
+        </div>
+
+        <textarea x-model="newProjectNovel" rows="6" placeholder="…or paste your novel text here"
+                  class="w-full bg-slate-800 text-slate-100 p-2 rounded text-sm"></textarea>
+      </div>
+      <p class="text-sm text-rose-400" x-show="newProjectError" x-text="newProjectError"></p>
+    </div>
+    <div class="flex justify-end gap-2 mt-5">
+      <button @click="newProjectOpen=false"
+              class="px-4 py-2 rounded text-sm bg-slate-700 hover:bg-slate-600">Cancel</button>
+      <button @click="submitNewProject()" :disabled="newProjectSaving || !newProjectName.trim()"
+              class="px-4 py-2 rounded text-sm bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40">
+        <span x-show="!newProjectSaving">Create</span>
+        <span x-show="newProjectSaving">Creating…</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 function inspector() {
   return {
     page: 'runs',
     projects: [], runs: [], runId: null, newProject: '',
+    newProjectOpen: false, newProjectName: '', newProjectNovel: '',
+    newProjectSaving: false, newProjectError: '',
+    newProjectDragOver: false, newProjectFileName: '',
     snapshot: {}, events: [], ws: null,
     agentNodes: [], finishedNodes: new Set(),
     artifacts: {}, filterNode: null,
@@ -989,6 +1055,69 @@ function inspector() {
     renderMarkdown(s) {
       try { return window.marked ? marked.parse(s || '') : (s || ''); }
       catch(e) { return s || ''; }
+    },
+
+    openNewProject() {
+      this.newProjectName = '';
+      this.newProjectNovel = '';
+      this.newProjectFileName = '';
+      this.newProjectError = '';
+      this.newProjectOpen = true;
+    },
+    async handleNovelFile(file) {
+      if (!file) return;
+      const MAX = 20 * 1024 * 1024;
+      if (file.size > MAX) {
+        this.newProjectError = `File too large (${(file.size/1024/1024).toFixed(1)} MB, max 20 MB)`;
+        return;
+      }
+      try {
+        this.newProjectError = '';
+        this.newProjectNovel = await file.text();
+        this.newProjectFileName = file.name;
+        if (!this.newProjectName.trim()) {
+          this.newProjectName = file.name
+            .replace(/\.[^.]+$/, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        }
+      } catch (e) {
+        this.newProjectError = 'Failed to read file: ' + (e.message || e);
+      }
+    },
+    handleNovelDrop(ev) {
+      this.newProjectDragOver = false;
+      const file = ev.dataTransfer?.files?.[0];
+      if (file) this.handleNovelFile(file);
+    },
+    async submitNewProject() {
+      const name = this.newProjectName.trim();
+      if (!name) return;
+      this.newProjectSaving = true;
+      this.newProjectError = '';
+      try {
+        const r = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, novel_text: this.newProjectNovel || '' }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: r.statusText }));
+          throw new Error(err.detail || 'Failed to create project');
+        }
+        this.projects = await fetch('/api/projects').then(r => r.json());
+        this.newProject = name;
+        if (this.page === 'admin' && this.adminSection === 'project_config') {
+          this.adminProject = name;
+          await this.loadProjectConfig();
+        }
+        this.newProjectOpen = false;
+      } catch (e) {
+        this.newProjectError = e.message || String(e);
+      } finally {
+        this.newProjectSaving = false;
+      }
     },
 
     async loadAdmin() {

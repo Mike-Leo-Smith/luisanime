@@ -21,6 +21,11 @@ class CreateRunReq(BaseModel):
     project_name: str
 
 
+class CreateProjectReq(BaseModel):
+    name: str
+    novel_text: Optional[str] = ""
+
+
 class ResumeReq(BaseModel):
     state_patch: Optional[Dict[str, Any]] = None
 
@@ -126,6 +131,21 @@ def create_app(projects_dir: str = "./projects") -> FastAPI:
         if not root.exists():
             return []
         return sorted(p.name for p in root.iterdir() if p.is_dir())
+
+    @api.post("/api/projects")
+    async def create_project(req: CreateProjectReq):
+        from src.pipeline.project import ProjectManager
+        name = (req.name or "").strip()
+        if not name or "/" in name or name.startswith("."):
+            raise HTTPException(400, "Invalid project name")
+        try:
+            pm = ProjectManager(projects_dir)
+            path = pm.create_project(name, req.novel_text or "")
+            return {"name": name, "path": str(path)}
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+        except Exception as e:
+            raise HTTPException(500, str(e))
 
     @api.get("/api/runs")
     async def list_runs():
