@@ -183,6 +183,10 @@ def main():
     sp = subparsers.add_parser("status")
     sp.add_argument("name")
 
+    serve_p = subparsers.add_parser("serve", help="Run the HITL web inspector")
+    serve_p.add_argument("--host", default="127.0.0.1")
+    serve_p.add_argument("--port", type=int, default=8765)
+
     args = parser.parse_args()
     if args.command == "create":
         create_project(args)
@@ -190,6 +194,15 @@ def main():
         run_pipeline(args)
     elif args.command == "status":
         status(args)
+    elif args.command == "serve":
+        import uvicorn
+        from src.server.app import create_app
+
+        uvicorn.run(
+            create_app(args.projects_dir),
+            host=args.host,
+            port=args.port,
+        )
     else:
         parser.print_help()
 

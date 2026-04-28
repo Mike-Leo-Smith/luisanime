@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AFP HITL Inspector</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, sans-serif; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<div x-data="inspector()" x-init="init()" class="flex h-screen">
+  <aside class="w-72 bg-slate-900 text-slate-100 p-4 overflow-y-auto">
+    <h1 class="text-lg font-semibold mb-4">AFP HITL</h1>
+    <div class="mb-6">
+      <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">New Run</h2>
+      <select x-model="newProject" class="w-full bg-slate-800 text-slate-100 p-2 rounded text-sm mb-2">
+        <option value="">Select project…</option>
+        <template x-for="p in projects" :key="p"><option x-text="p" :value="p"></option></template>
+      </select>
+      <button @click="createRun()" :disabled="!newProject"
+              class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 rounded text-sm">
+        Start
+      </button>
+    </div>
+    <div>
+      <h2 class="text-xs uppercase tracking-wider text-slate-400 mb-2">Runs</h2>
+      <ul class="space-y-1">
+        <template x-for="r in runs" :key="r.run_id">
+          <li>
+            <button @click="selectRun(r.run_id)"
+                    :class="r.run_id===runId ? 'bg-slate-700' : 'hover:bg-slate-800'"
+                    class="w-full text-left px-2 py-1.5 rounded text-xs">
+              <div class="font-mono truncate" x-text="r.run_id"></div>
+              <div class="text-slate-400" x-text="r.project_name + ' · ' + r.status"></div>
+            </button>
+          </li>
+        </template>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b px-6 py-3 flex items-center gap-4">
+      <div>
+        <div class="text-xs text-slate-500">Run</div>
+        <div class="font-mono text-sm" x-text="runId || '—'"></div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500">Status</div>
+        <div class="text-sm font-semibold" :class="statusColor()" x-text="snapshot.status || '—'"></div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500">Last node</div>
+        <div class="text-sm" x-text="snapshot.last_node || '—'"></div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500">Next</div>
+        <div class="text-sm" x-text="(snapshot.next || []).join(', ') || '—'"></div>
+      </div>
+      <div class="ml-auto flex gap-2">
+        <button @click="refresh()" class="text-sm px-3 py-1.5 border rounded hover:bg-slate-50">Refresh</button>
+        <button @click="resume()" :disabled="snapshot.status!=='paused'"
+                class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded disabled:opacity-40 hover:bg-blue-500">
+          Resume ▶
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-2 overflow-hidden">
+      <section class="border-r overflow-y-auto p-4">
+        <h2 class="text-sm font-semibold text-slate-700 mb-2">State</h2>
+        <pre class="text-xs bg-slate-900 text-slate-100 p-3 rounded" x-text="JSON.stringify(snapshot.values || {}, null, 2)"></pre>
+      </section>
+      <section class="overflow-y-auto p-4">
+        <h2 class="text-sm font-semibold text-slate-700 mb-2">Event log</h2>
+        <ul class="space-y-1 text-xs font-mono">
+          <template x-for="(e, i) in events" :key="i">
+            <li class="border-b py-1">
+              <span class="text-slate-400" x-text="e.ts?.slice(11,19) || ''"></span>
+              <span class="font-semibold" x-text="e.type"></span>
+              <span x-text="e.node ? '· ' + e.node : ''"></span>
+              <span class="text-slate-500" x-text="e.payload ? JSON.stringify(e.payload) : ''"></span>
+            </li>
+          </template>
+        </ul>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+function inspector() {
+  return {
+    projects: [], runs: [], runId: null, newProject: '',
+    snapshot: {}, events: [], ws: null,
+
+    async init() {
+      this.projects = await fetch('/api/projects').then(r => r.json());
+      await this.loadRuns();
+    },
+    async loadRuns() {
+      this.runs = await fetch('/api/runs').then(r => r.json());
+    },
+    async createRun() {
+      const r = await fetch('/api/runs', {
+        method: 'POST', headers: {'content-type': 'application/json'},
+        body: JSON.stringify({project_name: this.newProject})
+      }).then(x => x.json());
+      await this.loadRuns();
+      this.selectRun(r.run_id);
+    },
+    async selectRun(id) {
+      this.runId = id;
+      this.events = [];
+      await this.refresh();
+      this.openSocket();
+    },
+    async refresh() {
+      if (!this.runId) return;
+      this.snapshot = await fetch('/api/runs/' + this.runId).then(r => r.json());
+      await this.loadRuns();
+    },
+    openSocket() {
+      if (this.ws) { this.ws.close(); this.ws = null; }
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      this.ws = new WebSocket(`${proto}://${location.host}/api/ws/${this.runId}`);
+      this.ws.onmessage = (m) => {
+        const ev = JSON.parse(m.data);
+        if (ev.type === 'snapshot') { this.snapshot = ev.data; return; }
+        this.events.unshift(ev);
+        if (['run_paused','run_completed','run_error','node_finished'].includes(ev.type)) this.refresh();
+      };
+    },
+    async resume() {
+      await fetch('/api/runs/' + this.runId + '/resume', {
+        method: 'POST', headers: {'content-type': 'application/json'},
+        body: JSON.stringify({})
+      });
+    },
+    statusColor() {
+      return ({running:'text-blue-600', paused:'text-amber-600',
+               completed:'text-emerald-600', error:'text-red-600'})[this.snapshot.status] || 'text-slate-600';
+    },
+  };
+}
+</script>
+</body>
+</html>

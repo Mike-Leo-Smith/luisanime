@@ -13,3 +13,7 @@ pytest
 pytest-mock
 google-genai
 PyJWT
+fastapi
+uvicorn[standard]
+langgraph-checkpoint-sqlite
+aiosqlite

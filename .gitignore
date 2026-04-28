@@ -7,3 +7,5 @@ projects/
 novel_backup.txt
 pipeline_run*.log
 test_novel*.txt
+runs/
+.sisyphus/

@@ -237,3 +237,36 @@ workflow.add_conditional_edges(
 workflow.add_edge("editor", "showrunner")
 
 app = workflow.compile()
+
+
+# All agent node names — exposed so the HITL server can pick interrupt points.
+AGENT_NODES = [
+    "showrunner",
+    "screenwriter",
+    "production_designer",
+    "design_qa",
+    "director",
+    "script_coordinator",
+    "cinematographer",
+    "storyboard_qa",
+    "lead_animator",
+    "continuity_supervisor",
+    "editor",
+]
+
+
+def build_app(checkpointer=None, interrupt_after=None, interrupt_before=None):
+    """Compile the workflow with optional checkpointer and interrupt points.
+
+    Used by the HITL server to pause after each agent and persist state.
+    The module-level `app` (no checkpointer, no interrupts) is preserved
+    for the existing CLI `python main.py run` path.
+    """
+    kwargs = {}
+    if checkpointer is not None:
+        kwargs["checkpointer"] = checkpointer
+    if interrupt_after is not None:
+        kwargs["interrupt_after"] = interrupt_after
+    if interrupt_before is not None:
+        kwargs["interrupt_before"] = interrupt_before
+    return workflow.compile(**kwargs)
